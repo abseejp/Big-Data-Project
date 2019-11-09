@@ -4,6 +4,7 @@
 import sys
 import pyspark
 import string
+import os
 
 from pyspark import SparkContext
 from pyspark.sql import SparkSession
@@ -13,11 +14,6 @@ from pyspark.sql.types import StructType, StructField, IntegerType, StringType, 
 from pyspark.sql.window import Window
 from pyspark.sql.functions import col
 from pyspark.sql.functions import *
-
-
-# returns the data type for a particular attribute in a dataset
-def get_dtype(df,colname):
-    return [dtype for name, dtype in df.dtypes if name == colname][0]
 
 
 if __name__ == "__main__":
@@ -45,11 +41,38 @@ if __name__ == "__main__":
     attributes = dataset.columns
     dataset.printSchema()
 
+    #================= DataFrame Operations ==================
+
+    # Count all rows
+    count = dataset.count()
+
+    # Count distinct values
+    distinct_count = dataset.distinct().count()
+
+    # Attribute Data Type array
+    attribute_types = dict(dataset.dtypes)
+
+    # Frequent Itemsets
+    # need to retrieve sets of size 2, 3, and 4
+    itemSets = dataset.freqItems(dataset.columns)
+
+
+
+    #================= Spark SQL Operations ===================
+
     # for INTEGER type attributes, compute max, min, mean, stdev
     numData = dict()
     for attr in attributes:
 
-        dtype = get_dtype(dataset, attr)
+        # Finding potential primary keys
+        num_distinct_col_values = dataset.agg(countDistinct(col(attr)).alias("count"))
+        prim_key = []
+        if(num_distinct_col_values >= count*0.9):
+            prim_key.append(attr)
+
+
+        # Agrregation on INTEGER column types
+        dtype = attribute_types(attr)
         
         if(dtype == 'int'):
 
@@ -62,3 +85,10 @@ if __name__ == "__main__":
             
             # numData[attr] = [result.maxAttr.val, result.minAttr.val, result.meanAttr.val, result.stdAttr.val]
             # print(attr, [result.maxAttr.val, result.minAttr.val, result.meanAttr.val, result.stdAttr.val])
+
+
+
+    #================== Saving as JSON file =====================
+
+    # need to verify that this works
+    # df.write.format('json').save(path=os.getcwd())
