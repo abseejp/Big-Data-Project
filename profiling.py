@@ -26,7 +26,7 @@ if __name__ == "__main__":
 		.config("spark.some.config.option", "some-value") \
 		.getOrCreate()
 
-	sqlContext = SQLContext(spark)
+	sqlContext = SQLContext(sparkContext = spark.sparkContext, sparkSession = spark)
 
 	# get command-line arguments
 	inFile = sys.argv[1]
@@ -40,7 +40,7 @@ if __name__ == "__main__":
 	attributes = dataset.columns
 	dataset.printSchema()
 
-	#================= DataFrame Operations ==================
+#==================== DataFrame Operations =====================
 
 	# Attribute Data Type array
 	attribute_types = dict(dataset.dtypes)
@@ -49,15 +49,15 @@ if __name__ == "__main__":
 	# need to retrieve sets of size 2, 3, and 4
 	itemSets = dataset.freqItems(dataset.columns)
 
+#=================== Storage Data Structures ====================
 
+	numData = dict() # stores INT data: max, min, mean, stddev
+	strData = dict() # stores TEXT data: top-5 max length, top-5 min length, avg length
+	dateData = dict() # stores DATE data: earliest date, latest date
+	prim_key = [] # stores suspected primary key(s) for tsv file
 
-	#================= Spark SQL Operations ===================
+#================== Loop through every column ===================
 
-	# for INTEGER type attributes, compute max, min, mean, stdev
-	numData = dict()
-	strData = dict()
-	prim_key = []
-	# Loop through every column
 	for attr in attributes:
 		print(attr)
 		
@@ -85,13 +85,6 @@ if __name__ == "__main__":
 		dtype = attribute_types[attr]
 		
 		if(dtype == 'int'):
-
-			# query = """select max('""" + attr + """') as maxAttr, min('""" + attr + """') as minAttr, mean('""" + attr + """') as meanAttr,  std('""" + attr + """') as stdAttr from dataset"""
-			# # result = spark.sql(query).select(format_string('%.2f,%.2f,%.2f,%.2f', result.maxAttr, result.minAttr, result.meanAttr, result.stdAttr)).write.save("result.json",format="json")
-			# result = spark.sql(query)
-			# result.createOrReplaceTempView("result")
-			# # result = result.select(format_string('%.2f,%.2f,%.2f,%.2f', result.maxAttr, result.minAttr, result.meanAttr, result.stdAttr))
-			# spark.sql("select * from result").show()
 			
 			stats = dataset.agg(max(col(attr)).alias("max"), min(col(attr)).alias("min"), mean(col(attr)).alias("mean"), stddev(col(attr)).alias("stddev"))
 			col_max = stats.collect()[0]["max"]
@@ -106,14 +99,23 @@ if __name__ == "__main__":
 			continue
 		
 		elif(dtype == 'string'):
-			# Find max and min string length
-			continue
-			win = Window.orderBy(length(attr).desc())
-			win_asc = Window.orderBy(length(attr).asc)
-			dataset.select(attr).withColumn("str_len",length(attr)).withColumn("row_max", row_number().over(win_desc)).withColumn("row_min",row_number().over(win_asc)).filter('row_max <= 5 || row_min <= 5').show()
+			
+			# Find top-5 max and min string lengths
+			text_lengths = dataset.select(length(attr).alias('length'))
+			
+			text_lengths = text_lengths.orderBy(text_lengths.length.desc())
+			max_5 = text_lengths.limit(5).collect()
+			max_5 = [row["length"] for row in max_5]
+			print(max_5)
+			
+			text_lengths = text_lengths.orderBy(text_lengths.length.asc())
+			min_5 = text_lengths.limit(5).collect()
+			min_5 = [row["length"] for row in min_5]
+			print(min_5)
 
-
-
+			# Find average string length
+			avg = dataset.agg(mean(col(attr)).alias("mean")).collect()[0]["mean"]
+			
 	#================== Saving as JSON file =====================
 
 	# need to verify that this works
