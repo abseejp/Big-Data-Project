@@ -101,20 +101,19 @@ if __name__ == "__main__":
 		elif(dtype == 'string'):
 			
 			# Find top-5 max and min string lengths
-			text_lengths = dataset.select(length(attr).alias('length'))
-			
+			text_lengths = dataset.withColumn("length", length(attr))			
 			text_lengths = text_lengths.orderBy(text_lengths.length.desc())
 			max_5 = text_lengths.limit(5).collect()
-			max_5 = [row["length"] for row in max_5]
-			print(max_5)
-			
+			max_5_length = [row[attr] for row in max_5]
+
 			text_lengths = text_lengths.orderBy(text_lengths.length.asc())
 			min_5 = text_lengths.limit(5).collect()
-			min_5 = [row["length"] for row in min_5]
-			print(min_5)
+			min_5_length = [row[attr] for row in min_5]
 
 			# Find average string length
-			avg = dataset.agg(mean(col(attr)).alias("mean")).collect()[0]["mean"]
+			avg_length = dataset.agg(mean(col(attr)).alias("mean")).collect()[0]["mean"]
+
+			strData[attr] = [max_5_length, min_5_length, avg_length]
 			
 	#================== Saving as JSON file =====================
 
