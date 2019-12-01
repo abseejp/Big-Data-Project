@@ -42,6 +42,10 @@ if __name__ == "__main__":
 
 #==================== DataFrame Operations =====================
 
+	# Count all values for a column
+	num_col_values = dataset.count()
+	print("num_col_values:", num_col_values)
+
 	# Attribute Data Type array
 	attribute_types = dict(dataset.dtypes)
 
@@ -59,29 +63,45 @@ if __name__ == "__main__":
 #================== Loop through every column ===================
 
 	for attr in attributes:
-		print(attr)
-		
-		# Count all values for a column
-		num_col_values = dataset.select(attr).count()
-		print("num_col_values:", num_col_values)
-		
-		# Count number of distinct values
-		num_distinct_col_values = dataset.agg(countDistinct(col(attr)).alias("count_distinct")).collect()[0]["count_distinct"]
-		print("num_distinct_col_values:",num_distinct_col_values)
-		
-		# Finding potential primary keys
-		if(num_distinct_col_values >= num_col_values*0.9):
-			prim_key.append(attr)
+		print("\n", attr)
 
 		# Find data types of all values in the column
 		# def findType(x):
 		# 	return str(type(x))
 
 		# udftype = udf(findType, StringType())
-		# column_types = dataset.select(attr).rdd.map(lambda x: (x, udftype(x))).toDF()
+		# column_types = dataset.rdd.map(lambda x: (x[attr], udftype(x[attr]))).toDF()
 		# column_types.show()
 		# type_counts = column_types.groupBy("_2").count().alias("count_types")
 		# type_counts.show()
+
+		# Count number of distinct values
+		num_distinct_col_values = dataset.agg(countDistinct(col(attr)).alias("count_distinct")).collect()[0]["count_distinct"]
+		print("num_distinct_col_values:",num_distinct_col_values)
+
+		val_count = dataset.groupBy(attr).count()
+		# Top 5 most frequent values
+		top_5_frequent = val_count.orderBy(val_count["count"].desc())
+		top_5_frequent = top_5_frequent.limit(5).collect()
+		top_5_frequent = [row[attr] for row in top_5_frequent]
+		print("top 5 frequent values:", top_5_frequent)		
+
+		# Count all None values for a column
+		num_col_none = val_count.filter(col(attr).isNull()).collect()
+		if(len(num_col_none) > 0):
+			num_col_none = num_col_none[0]["count"]
+		else:
+			num_col_none = 0
+		print("num_col_none:", num_col_none)
+
+		# Count all non-empty values for a column
+		num_col_notnone = num_col_values - num_col_none
+		print("num_col_notnone:", num_col_notnone)
+
+		# Finding potential primary keys
+		if(num_distinct_col_values >= num_col_values*0.9):
+			prim_key.append(attr)
+
 		dtype = attribute_types[attr]
 		
 		if(dtype == 'int'):
@@ -104,7 +124,7 @@ if __name__ == "__main__":
 			text_lengths = dataset.withColumn("length", length(attr))			
 			text_lengths = text_lengths.orderBy(text_lengths.length.desc())
 			max_5 = text_lengths.limit(5).collect()
-			max_5_length = [row[attr] for row in max_5]
+			max_5_length = [row[attr] for row in max_5] # save the string values
 
 			text_lengths = text_lengths.orderBy(text_lengths.length.asc())
 			min_5 = text_lengths.limit(5).collect()
