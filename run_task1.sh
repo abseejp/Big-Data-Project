@@ -1,3 +1,7 @@
+# TO USE:
+# Change scratch location USER to individual using it
+# File was run on NYU DUMBO HPC
+
 # /usr/bin/hadoop fs -get "/user/hm74/NYCOpenData" "/scratch/mva271"
 
 for filename in /scratch/mva271/NYCOpenData/*.gz; do
