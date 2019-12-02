@@ -5,6 +5,7 @@ import sys
 import pyspark
 import string
 import os
+import json
 
 from pyspark import SparkContext
 from pyspark.sql import SparkSession
@@ -37,6 +38,9 @@ if __name__ == "__main__":
 	dataset.createOrReplaceTempView("dataset")
 	sqlContext.cacheTable("dataset")
 
+	end = len(inFile)
+	inFile = inFile[:end-7]
+
 	dataset.printSchema()
 
 	dataset = dataset.select([col(c).alias(c.replace(".", "").replace("`", "")) for c in ["`" + x + "`" for x in dataset.columns]]) # pyspark cannot handle '.' in headers
@@ -58,12 +62,18 @@ if __name__ == "__main__":
 
 #=================== Storage Data Structures ====================
 
-	numData = dict() # stores INT data: max, min, mean, stddev
-	strData = dict() # stores TEXT data: top-5 max length, top-5 min length, avg length
-	dateData = dict() # stores DATE data: earliest date, latest date
+	dataset_dict = {
+		"dataset_name": inFile,
+		"columns": [],
+		"key_column_candidates": []
+	}
+
 	prim_key = [] # stores suspected primary key(s) for tsv file
 
+
 #================== Loop through every column ===================
+
+
 
 	for attr in attributes:
 		print("")
@@ -120,6 +130,16 @@ if __name__ == "__main__":
 
 		# be wary of entry 's', 'R' ...
 
+
+		column = {
+			"column_name": attr,
+			"number_non_empty_cells": num_col_notempty,
+			"number_empty_cells": num_col_empty,
+			"number_distinct_values": num_distinct_col_values,
+			"frequent_values": 0, ############ CHANGE THIS ###################
+			"data_types": []
+			}
+
 		#================== Column-Type Profiling ===================
 
 		dtype = attribute_types[attr] # fetch datatype of the current column
@@ -139,7 +159,7 @@ if __name__ == "__main__":
 				dtype = 'int'
 
 		# classifying numeric columns representing dates as 'date'
-		if('year' in attr.lower() or 'day' in attr.lower() or 'month' in attr.lower() or 'period' in attr.lower()):
+		if('year' in attr.lower() or 'day' in attr.lower() or 'month' in attr.lower() or 'period' in attr.lower() or 'week' in attr.lower()):
 			dtype = 'date'
 
 
@@ -154,41 +174,75 @@ if __name__ == "__main__":
 			col_mean = stats.collect()[0]["mean"]
 			col_stddev = stats.collect()[0]["stddev"]
 
-			numData[attr] = [col_max, col_min, col_mean, col_stddev]
-			print(numData[attr])
+			# Add column to JSON
+			column["data_types"].append({
+					"type": "INTEGER (LONG)",
+					"count": 0, ################ UPDATE THIS #############################
+					"max_value": col_max,
+					"min_value": col_min,
+					"mean": col_mean,
+					"stddev": col_stddev
+				})
 
 		elif(dtype == 'date'):
 			# Fetch the earliest and latest dates
-			if('year' in attr.lower() or 'day' in attr.lower() or 'month' in attr.lower() or 'period' in attr.lower()):
+			if('year' in attr.lower() or 'day' in attr.lower() or 'month' in attr.lower() or 'period' in attr.lower() or 'week' in attr.lower()):
 				stats = cleaned_dataset.agg(max(col(attr)).alias("max"), min(col(attr)).alias("min"))
 				col_max = stats.collect()[0]["max"]
 				col_min = stats.collect()[0]["min"]			
-				dateData[attr] = [col_max, col_min]
-				print(dateData[attr])
-
 			else:
+				col_max = 0
+				col_min = 0
 				# TRYING TO BREAK ON A TRUE DATE COLUMN FOR DEBUGGING
 				text_lengths = text_lengths.orderBy(text_lengths.cars.desc())
 
+			# Add column to JSON
+			column["data_types"].append({
+					"type": "DATE/TIME",
+					"count": 0, ################ UPDATE THIS #############################
+					"max_value": col_max,
+					"min_value": col_min
+				})
+
 		elif(dtype == 'string'):
 			
-			# Find top-5 max and min string lengths
+			# Find top-5 longest strings
 			text_lengths = cleaned_dataset.withColumn("length", length(attr))			
 			text_lengths = text_lengths.orderBy(text_lengths.length.desc())
 			max_5 = text_lengths.limit(5).collect()
+
 			max_5_length = [row[attr] for row in max_5] # save the string values
 
+			# Find the top-5 shortest words
 			text_lengths = text_lengths.orderBy(text_lengths.length.asc())
 			min_5 = text_lengths.limit(5).collect()
+
 			min_5_length = [row[attr] for row in min_5]
 
 			# Find average string length
 			avg_length = text_lengths.agg(mean(col("length")).alias("mean")).collect()[0]["mean"]
-
-			strData[attr] = [max_5_length, min_5_length, avg_length]
-			print(strData[attr])
 			
+			# Add column to JSON
+			column["data_types"].append({
+				"type": "TEXT",
+				"count": 0, ################ UPDATE THIS #############################
+				"shortest_values": min_5_length,
+				"longest_values": max_5_length,
+				"average_length": avg_length
+				})
+		
+		else:
+			# Add column to JSON
+			column["data_types"].append({
+				"semantic_type": dtype,
+				"count": 0
+			})
+
+		dataset_dict["columns"].append(column)
+		dataset_dict["key_column_candidates"] = prim_key
+
 	#================== Saving as JSON file =====================
 
-	# need to verify that this works
-	# df.write.format('json').save(path=os.getcwd())
+	json_filename = inFile + ".json"
+	with open(json_filename,"w") as f:
+		json.dump(dataset_dict, f)
