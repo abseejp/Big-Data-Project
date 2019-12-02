@@ -37,10 +37,13 @@ if __name__ == "__main__":
 	dataset.createOrReplaceTempView("dataset")
 	sqlContext.cacheTable("dataset")
 
-	attributes = dataset.columns
 	dataset.printSchema()
 
-#==================== DataFrame Operations =====================
+	dataset = dataset.select([col(c).alias(c.replace(".", "").replace("`", "")) for c in ["`" + x + "`" for x in dataset.columns]]) # pyspark cannot handle '.' in headers
+
+	attributes = dataset.columns
+
+#=================== General DF Operations ====================
 
 	# Count all values for a column
 	num_col_values = dataset.count()
@@ -63,7 +66,40 @@ if __name__ == "__main__":
 #================== Loop through every column ===================
 
 	for attr in attributes:
-		print("\n", attr)
+		print("")
+		print(attr)
+
+		#================== Metadata Profiling ===================
+
+		# Count number of distinct values
+		num_distinct_col_values = dataset.agg(countDistinct(col(attr)).alias("count_distinct")).collect()[0]["count_distinct"]
+		print("num_distinct_col_values:",num_distinct_col_values)
+
+		val_count = dataset.groupBy(attr).count()
+		
+		# Top 5 most frequent values
+		top_5_frequent = val_count.orderBy(val_count["count"].desc())
+		top_5_frequent = top_5_frequent.limit(5).collect()
+		top_5_frequent = [row[attr] for row in top_5_frequent]
+		print("top 5 frequent values:", top_5_frequent)		
+
+		# Count all empty values for a column
+		num_col_empty = val_count.filter(col(attr).isNull()).collect()
+		if(len(num_col_empty) > 0):
+			num_col_empty = num_col_empty[0]["count"]
+		else:
+			num_col_empty = 0
+		print("num_col_empty:", num_col_empty)
+
+		# Count all non-empty values for a column
+		num_col_notempty = num_col_values - num_col_empty
+		print("num_col_notempty:", num_col_notempty)
+
+		# Finding potential primary keys
+		if(num_distinct_col_values >= num_col_values*0.9):
+			prim_key.append(attr)
+
+		#====================== Data Cleaning =======================
 
 		# Find data types of all values in the column
 		# def findType(x):
@@ -75,53 +111,69 @@ if __name__ == "__main__":
 		# type_counts = column_types.groupBy("_2").count().alias("count_types")
 		# type_counts.show()
 
-		# Count number of distinct values
-		num_distinct_col_values = dataset.agg(countDistinct(col(attr)).alias("count_distinct")).collect()[0]["count_distinct"]
-		print("num_distinct_col_values:",num_distinct_col_values)
+		# Drop all empty cells from dataset
+		# cleaned_dataset = dataset.dropna(how='any') # drop the entire row if any cells are NaN in it
 
-		val_count = dataset.groupBy(attr).count()
-		# Top 5 most frequent values
-		top_5_frequent = val_count.orderBy(val_count["count"].desc())
-		top_5_frequent = top_5_frequent.limit(5).collect()
-		top_5_frequent = [row[attr] for row in top_5_frequent]
-		print("top 5 frequent values:", top_5_frequent)		
+		cleaned_dataset = dataset.exceptAll(dataset.filter(col(attr).isNull())) # drop the entire row if any cells are empty in it
+		cleaned_dataset = cleaned_dataset.exceptAll(cleaned_dataset.filter(cleaned_dataset[attr].like('No Data%'))) # remove entries with 'No Data'
+		cleaned_dataset = cleaned_dataset.exceptAll(cleaned_dataset.filter(cleaned_dataset[attr].like('N/A%'))) # remove entries with 'N/A'
 
-		# Count all None values for a column
-		num_col_none = val_count.filter(col(attr).isNull()).collect()
-		if(len(num_col_none) > 0):
-			num_col_none = num_col_none[0]["count"]
-		else:
-			num_col_none = 0
-		print("num_col_none:", num_col_none)
+		# be wary of entry 's', 'R' ...
 
-		# Count all non-empty values for a column
-		num_col_notnone = num_col_values - num_col_none
-		print("num_col_notnone:", num_col_notnone)
+		#================== Column-Type Profiling ===================
 
-		# Finding potential primary keys
-		if(num_distinct_col_values >= num_col_values*0.9):
-			prim_key.append(attr)
+		dtype = attribute_types[attr] # fetch datatype of the current column
 
-		dtype = attribute_types[attr]
-		
-		if(dtype == 'int'):
+		# work with list of dtypes per columns, check " 'int' in dtypes ", filter columns for these specific types
+		# Fixed misclassified datatypes
+		if(dtype == 'string'):
+
+			# Check if string column contains numeric values casted as strings:
+			num_non_ints = cleaned_dataset.select(attr, col(attr).cast("float").isNotNull().alias("Value")).filter(col("Value") == False).count() # count number of non INT entries
 			
-			stats = dataset.agg(max(col(attr)).alias("max"), min(col(attr)).alias("min"), mean(col(attr)).alias("mean"), stddev(col(attr)).alias("stddev"))
+			if(num_non_ints > 0): # at least one entry is not a pure number
+				if(num_non_ints / num_col_values <= 0.1): # if it appears in more than 10% of the columns, it is most likely not an INT column
+					cleaned_dataset = cleaned_dataset.select(attr, col(attr).cast("float").isNotNull().alias("Value")).filter(col("Value") == True) # remove the non INT entries
+					dtype = 'int'
+			else:
+				dtype = 'int'
+
+		# classifying numeric columns representing dates as 'date'
+		if('year' in attr.lower() or 'day' in attr.lower() or 'month' in attr.lower() or 'period' in attr.lower()):
+			dtype = 'date'
+
+
+		print(dtype)
+
+		# Profile the column based on datatype
+		if(dtype == 'int' or dtype == 'double' or dtype == 'float' or dtype == 'long'):
+			
+			stats = cleaned_dataset.agg(max(col(attr)).alias("max"), min(col(attr)).alias("min"), mean(col(attr)).alias("mean"), stddev(col(attr)).alias("stddev"))
 			col_max = stats.collect()[0]["max"]
 			col_min = stats.collect()[0]["min"]
 			col_mean = stats.collect()[0]["mean"]
 			col_stddev = stats.collect()[0]["stddev"]
 
 			numData[attr] = [col_max, col_min, col_mean, col_stddev]
+			print(numData[attr])
 
 		elif(dtype == 'date'):
-			# Format date attributes to same structure
-			continue
-		
+			# Fetch the earliest and latest dates
+			if('year' in attr.lower() or 'day' in attr.lower() or 'month' in attr.lower() or 'period' in attr.lower()):
+				stats = cleaned_dataset.agg(max(col(attr)).alias("max"), min(col(attr)).alias("min"))
+				col_max = stats.collect()[0]["max"]
+				col_min = stats.collect()[0]["min"]			
+				dateData[attr] = [col_max, col_min]
+				print(dateData[attr])
+
+			else:
+				# TRYING TO BREAK ON A TRUE DATE COLUMN FOR DEBUGGING
+				text_lengths = text_lengths.orderBy(text_lengths.cars.desc())
+
 		elif(dtype == 'string'):
 			
 			# Find top-5 max and min string lengths
-			text_lengths = dataset.withColumn("length", length(attr))			
+			text_lengths = cleaned_dataset.withColumn("length", length(attr))			
 			text_lengths = text_lengths.orderBy(text_lengths.length.desc())
 			max_5 = text_lengths.limit(5).collect()
 			max_5_length = [row[attr] for row in max_5] # save the string values
@@ -131,9 +183,10 @@ if __name__ == "__main__":
 			min_5_length = [row[attr] for row in min_5]
 
 			# Find average string length
-			avg_length = dataset.agg(mean(col(attr)).alias("mean")).collect()[0]["mean"]
+			avg_length = text_lengths.agg(mean(col("length")).alias("mean")).collect()[0]["mean"]
 
 			strData[attr] = [max_5_length, min_5_length, avg_length]
+			print(strData[attr])
 			
 	#================== Saving as JSON file =====================
 
