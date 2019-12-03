@@ -34,7 +34,7 @@ if __name__ == "__main__":
 
 	print ("Executing data profiling with input from " + inFile)
 
-	dataset = sqlContext.read.format('csv').options(header='true', inferschema='true', delimiter='\t', ignoreLeadingWhiteSpace='true', ignoreTrailingWhiteSpace='true').load(inFile)
+	dataset = sqlContext.read.format('csv').options(header='true', inferschema='true', delimiter='\t', ignoreLeadingWhiteSpace='true', ignoreTrailingWhiteSpace='true', encoding='utf-8').load(inFile)
 	dataset.createOrReplaceTempView("dataset")
 	sqlContext.cacheTable("dataset")
 
@@ -44,7 +44,6 @@ if __name__ == "__main__":
 	dataset.printSchema()
 
 	dataset = dataset.select([col(c).alias(c.replace(".", "").replace("`", "")) for c in ["`" + x + "`" for x in dataset.columns]]) # pyspark cannot handle '.' in headers
-
 	attributes = dataset.columns
 
 #=================== General DF Operations ====================
@@ -58,7 +57,8 @@ if __name__ == "__main__":
 
 	# Frequent Itemsets
 	# need to retrieve sets of size 2, 3, and 4
-	itemSets = dataset.freqItems(dataset.columns, support=(4 / num_col_values))
+	itemSets = dataset.na.drop() # need to remove Null values to avoid error
+	itemSets = itemSets.freqItems(dataset.columns, support=(4 / num_col_values))
 
 #=================== Storage Data Structures ====================
 
@@ -68,32 +68,17 @@ if __name__ == "__main__":
 		"key_column_candidates": []
 	}
 
-	prim_key = [] # stores suspected primary key(s) for tsv file
-
 #================== Loop through every column ===================
 
 	for attr in attributes:
 		print("")
 		print(attr)
-
-		# Find number of frequent values
-		slen = udf(lambda s: len(s), IntegerType())
-		num_itemSets = itemSets.withColumn("size", slen(itemSets[attr + "_freqItems"])).collect()[0]["size"]
-		print("num_itemSets:", num_itemSets)
+		dtype = attribute_types[attr] # fetch datatype of the current column
 
 		#================== Metadata Profiling ===================
 
-		# Count number of distinct values
-		num_distinct_col_values = dataset.agg(countDistinct(col(attr)).alias("count_distinct")).collect()[0]["count_distinct"]
-		print("num_distinct_col_values:",num_distinct_col_values)
-
 		val_count = dataset.groupBy(attr).count()
 		
-		# Top 5 most frequent values
-		top_5_frequent = val_count.orderBy(val_count["count"].desc())
-		top_5_frequent = top_5_frequent.limit(5).collect()
-		top_5_frequent = [row[attr] for row in top_5_frequent]
-		print("top 5 frequent values:", top_5_frequent)		
 
 		# Count all empty values for a column
 		num_col_empty = val_count.filter(col(attr).isNull()).collect()
@@ -107,11 +92,35 @@ if __name__ == "__main__":
 		num_col_notempty = num_col_values - num_col_empty
 		print("num_col_notempty:", num_col_notempty)
 
+		# ****** Remove junk from dataset ******
+		cleaned_dataset = dataset.exceptAll(dataset.filter(col(attr).isNull())) # drop the entire row if any cells are empty in it
+		cleaned_dataset = cleaned_dataset.exceptAll(cleaned_dataset.filter(cleaned_dataset[attr].like('No Data%'))) # remove entries with 'No Data'
+		cleaned_dataset = cleaned_dataset.exceptAll(cleaned_dataset.filter(cleaned_dataset[attr].like('NA%'))) # remove entries with 'N/A'
+		if(dtype == 'string'):
+			# ignore any characters in string that are not UTF-8 encoded
+			udfencode = udf(lambda x: x.encode("utf-8", "ignore"), StringType())
+			cleaned_dataset = cleaned_dataset.withColumn(attr, udfencode(attr))	
+
+		# Count number of distinct values
+		num_distinct_col_values = cleaned_dataset.agg(countDistinct(col(attr)).alias("count_distinct")).collect()[0]["count_distinct"]
+		print("num_distinct_col_values:", num_distinct_col_values)
+		
 		# Finding potential primary keys
 		if(num_distinct_col_values >= num_col_values*0.9):
-			prim_key.append(attr)
+			dataset_dict["key_column_candidates"].append(attr)
+		# Top 5 most frequent values
+		cleaned_count = cleaned_dataset.groupBy(attr).count()
+		top_5_frequent = cleaned_count.orderBy(cleaned_count["count"].desc())
+		top_5_frequent = top_5_frequent.limit(5).collect()
+		top_5_frequent = [row[attr] for row in top_5_frequent]
+		print("top 5 frequent values:", top_5_frequent)		
 
-		#====================== Data Cleaning =======================
+		# Find number of frequent values
+		arrlen_udf = udf(lambda s: len(s), IntegerType())
+		num_freq_items = itemSets.withColumn("size", arrlen_udf(itemSets[attr + "_freqItems"])).collect()[0]["size"]
+		print("num_freq_items:", num_freq_items)
+
+		#====================== Data Typing =======================
 
 		# Find data types of all values in the column
 		# def findType(x):
@@ -126,25 +135,22 @@ if __name__ == "__main__":
 		# Drop all empty cells from dataset
 		# cleaned_dataset = dataset.dropna(how='any') # drop the entire row if any cells are NaN in it
 
-		cleaned_dataset = dataset.exceptAll(dataset.filter(col(attr).isNull())) # drop the entire row if any cells are empty in it
-		cleaned_dataset = cleaned_dataset.exceptAll(cleaned_dataset.filter(cleaned_dataset[attr].like('No Data%'))) # remove entries with 'No Data'
-		cleaned_dataset = cleaned_dataset.exceptAll(cleaned_dataset.filter(cleaned_dataset[attr].like('N/A%'))) # remove entries with 'N/A'
+
 
 		# be wary of entry 's', 'R' ...
 
 
+		#================== Column-Type Profiling ===================
+		
 		column = {
 			"column_name": attr,
 			"number_non_empty_cells": num_col_notempty,
 			"number_empty_cells": num_col_empty,
 			"number_distinct_values": num_distinct_col_values,
-			"frequent_values": num_itemSets,
+			"frequent_values": num_freq_items,
 			"data_types": []
 			}
 
-		#================== Column-Type Profiling ===================
-
-		dtype = attribute_types[attr] # fetch datatype of the current column
 
 		# work with list of dtypes per columns, check " 'int' in dtypes ", filter columns for these specific types
 		# Fixed misclassified datatypes
@@ -161,6 +167,7 @@ if __name__ == "__main__":
 				dtype = 'int'
 
 		# classifying numeric columns representing dates as 'date'
+		# if(('year' in attr.lower() and len(attr) == 4) or ('day' in attr.lower() and len(attr) == 3) or ('month' in attr.lower() and len(attr) == 5) or 'period' in attr.lower() or ('week' in attr.lower() and len(attr) == 4)):
 		if('year' in attr.lower() or 'day' in attr.lower() or 'month' in attr.lower() or 'period' in attr.lower() or 'week' in attr.lower()):
 			dtype = 'date'
 
@@ -188,8 +195,24 @@ if __name__ == "__main__":
 
 		elif(dtype == 'date'):
 			# Fetch the earliest and latest dates
+
 			if('year' in attr.lower() or 'day' in attr.lower() or 'month' in attr.lower() or 'period' in attr.lower() or 'week' in attr.lower()):
-				# search for month in [Jan, Feb, ...]
+
+				def findDate(x):
+					months = ['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december']
+					for month in months:
+						lower_x = x.lower()
+						x_month_index = lower_x.find(month)
+						
+						if(x_month_index != -1):
+							date = str(months.index(month)) + " " + x[x_month_index+len(month):] # replace string month with its numerical equivalent (e.g. Jan -> 1, Feb -> 2, ...)
+							return date
+
+					return x # if string month is not present, just return original date string
+
+				udfdatefind = udf(findDate, StringType())
+				cleaned_dataset = cleaned_dataset.withColumn(attr, udfdatefind(attr))
+
 				stats = cleaned_dataset.agg(max(col(attr)).alias("max"), min(col(attr)).alias("min"))
 				col_max = stats.collect()[0]["max"]
 				col_min = stats.collect()[0]["min"]			
@@ -242,7 +265,6 @@ if __name__ == "__main__":
 			})
 
 		dataset_dict["columns"].append(column)
-		dataset_dict["key_column_candidates"] = prim_key
 
 	#================== Saving as JSON file =====================
 
