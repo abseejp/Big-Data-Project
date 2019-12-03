@@ -34,7 +34,7 @@ if __name__ == "__main__":
 
 	print ("Executing data profiling with input from " + inFile)
 
-	dataset = sqlContext.read.format('csv').options(header='true', inferschema='true', delimiter='\t', ignoreLeadingWhiteSpace='true', ignoreTrailingWhiteSpace='true', encoding='utf-8').load(inFile)
+	dataset = sqlContext.read.format('csv').options(header='true', inferschema='true', delimiter='\t', ignoreLeadingWhiteSpace='true', ignoreTrailingWhiteSpace='true', emptyValues='Null').load(inFile)
 	dataset.createOrReplaceTempView("dataset")
 	sqlContext.cacheTable("dataset")
 
@@ -79,9 +79,9 @@ if __name__ == "__main__":
 
 		val_count = dataset.groupBy(attr).count()
 		
-
 		# Count all empty values for a column
-		num_col_empty = val_count.filter(col(attr).isNull()).collect()
+		# num_col_empty = val_count.filter(col(attr).isNull() | col(attr) == 'No Data' | col(attr) == '*' | col(attr) == 'NA').collect()
+		num_col_empty = val_count.filter(col(attr).rlike('[^\\*]|^$|No Data|NA|N\\A|None')).collect()
 		if(len(num_col_empty) > 0):
 			num_col_empty = num_col_empty[0]["count"]
 		else:
@@ -94,12 +94,16 @@ if __name__ == "__main__":
 
 		# ****** Remove junk from dataset ******
 		cleaned_dataset = dataset.exceptAll(dataset.filter(col(attr).isNull())) # drop the entire row if any cells are empty in it
-		cleaned_dataset = cleaned_dataset.exceptAll(cleaned_dataset.filter(cleaned_dataset[attr].like('No Data%'))) # remove entries with 'No Data'
-		cleaned_dataset = cleaned_dataset.exceptAll(cleaned_dataset.filter(cleaned_dataset[attr].like('NA%'))) # remove entries with 'N/A'
+		cleaned_dataset = cleaned_dataset.exceptAll(cleaned_dataset.filter(cleaned_dataset[attr].rlike('No Data|NA|N\\A|None'))) # remove entries with 'No Data', 'NA'
+		# **************************************
+		
 		if(dtype == 'string'):
 			# ignore any characters in string that are not UTF-8 encoded
-			udfencode = udf(lambda x: x.encode("utf-8", "ignore"), StringType())
+			def fix_encoding(x):
+				return x.encode("ascii", "ignore").decode("ascii")
+			udfencode = udf(fix_encoding, StringType())
 			cleaned_dataset = cleaned_dataset.withColumn(attr, udfencode(attr))	
+			cleaned_dataset = cleaned_dataset.exceptAll(cleaned_dataset.filter(cleaned_dataset[attr].rlike('[\\*]|^$|%'))) # remove garbage values from conversion
 
 		# Count number of distinct values
 		num_distinct_col_values = cleaned_dataset.agg(countDistinct(col(attr)).alias("count_distinct")).collect()[0]["count_distinct"]
