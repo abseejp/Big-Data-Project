@@ -58,7 +58,7 @@ if __name__ == "__main__":
 
 	# Frequent Itemsets
 	# need to retrieve sets of size 2, 3, and 4
-	itemSets = dataset.freqItems(dataset.columns)
+	itemSets = dataset.freqItems(dataset.columns, support=(4 / num_col_values))
 
 #=================== Storage Data Structures ====================
 
@@ -70,14 +70,16 @@ if __name__ == "__main__":
 
 	prim_key = [] # stores suspected primary key(s) for tsv file
 
-
 #================== Loop through every column ===================
-
-
 
 	for attr in attributes:
 		print("")
 		print(attr)
+
+		# Find number of frequent values
+		slen = udf(lambda s: len(s), IntegerType())
+		num_itemSets = itemSets.withColumn("size", slen(itemSets[attr + "_freqItems"])).collect()[0]["size"]
+		print("num_itemSets:", num_itemSets)
 
 		#================== Metadata Profiling ===================
 
@@ -136,7 +138,7 @@ if __name__ == "__main__":
 			"number_non_empty_cells": num_col_notempty,
 			"number_empty_cells": num_col_empty,
 			"number_distinct_values": num_distinct_col_values,
-			"frequent_values": 0, ############ CHANGE THIS ###################
+			"frequent_values": num_itemSets,
 			"data_types": []
 			}
 
@@ -187,6 +189,7 @@ if __name__ == "__main__":
 		elif(dtype == 'date'):
 			# Fetch the earliest and latest dates
 			if('year' in attr.lower() or 'day' in attr.lower() or 'month' in attr.lower() or 'period' in attr.lower() or 'week' in attr.lower()):
+				# search for month in [Jan, Feb, ...]
 				stats = cleaned_dataset.agg(max(col(attr)).alias("max"), min(col(attr)).alias("min"))
 				col_max = stats.collect()[0]["max"]
 				col_min = stats.collect()[0]["min"]			
