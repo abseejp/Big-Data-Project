@@ -50,8 +50,9 @@ if __name__ == "__main__":
 	num_col_values = dataset.count()
 	print("num_col_values:", num_col_values)
 
-	# Attribute Data Type array
-	attribute_types = dict(dataset.dtypes)
+	# Header data type dictionary
+	header_types = dict(dataset.dtypes)
+	
 
 #===================== Storage Dictionary ======================
 
@@ -62,40 +63,43 @@ if __name__ == "__main__":
 	}
 
 #================== Loop through every column ===================
-	attributes = ['DOING BUSINESS START DATE']
+
 	for attr in attributes:
 		print("")
 		print(attr)
-		dtype = attribute_types[attr] # fetch datatype of the current column
+		header_dtype = header_types[attr] # fetch header datatype of the current column
 
 		#================== Metadata Profiling ===================
 
 		val_count = dataset.groupBy(attr).agg(count(col(attr)).alias("val_count"))
 		
 		# Count all empty values for a column
-		# num_col_empty = val_count.filter(col(attr).isNull() | col(attr) == 'No Data' | col(attr) == '*' | col(attr) == 'NA').collect()
-		num_col_empty = val_count.filter(col(attr).rlike('\\*|^$|No Data|NA|N\\A|None')).collect()
-		if(len(num_col_empty) > 0):
-			num_col_empty = num_col_empty[0]["val_count"]
+		num_col_labeled_empty = val_count.filter(col(attr).rlike('\\*|^$|No Data|NA|N\\A|None|null')).collect()
+		if(len(num_col_labeled_empty) > 0):
+			num_col_labeled_empty = num_col_labeled_empty[0]["val_count"]
 		else:
-			num_col_empty = 0
+			num_col_labeled_empty = 0
+
+		num_col_null = dataset.select(col(attr).isNull()).count()
+		num_col_empty = num_col_null + num_col_labeled_empty
 		print("num_col_empty:", num_col_empty)
 
 		# Count all non-empty values for a column
-		num_col_notempty = num_col_values - num_col_empty
+		num_col_notempty = (num_col_values - num_col_empty)
+		if(num_col_notempty <= 0):
+			num_col_notempty = 0
 		print("num_col_notempty:", num_col_notempty)
 		
-
 		# ************ Remove junk from dataset ************
 
 		cleaned_dataset = dataset.exceptAll(dataset.filter(col(attr).isNull())) # drop the entire row if any cells are empty in it
-		cleaned_dataset = cleaned_dataset.exceptAll(cleaned_dataset.filter(cleaned_dataset[attr].rlike('^$|No Data|NA|N\\A|None'))) # remove entries with 'No Data', 'NA', 'None'
+		cleaned_dataset = cleaned_dataset.exceptAll(cleaned_dataset.filter(cleaned_dataset[attr].rlike('^$|No Data|NA|N\\A|None|%|null'))) # remove entries with 'No Data', 'NA', 'None'
 		
 		# **************************************************
 		
 		"""
 		# convert string encodings into ascii if special characters appear
-		if(dtype == 'string'):
+		if(header_dtype == 'string'):
 			def fix_encoding(x):
 				return x.encode("ascii", "ignore").decode("ascii")
 			udfencode = udf(fix_encoding, StringType())
@@ -108,7 +112,7 @@ if __name__ == "__main__":
 		print("num_distinct_col_values:", num_distinct_col_values)
 		
 		# Finding potential primary keys
-		if(num_distinct_col_values >= num_col_values*0.9):
+		if(num_distinct_col_values >= num_col_values*0.9 and num_col_empty == 0):
 			dataset_dict["key_column_candidates"].append(attr)
 		# Top 5 most frequent values
 		cleaned_count = cleaned_dataset.groupBy(attr).agg(count(col(attr)).alias("val_count"))
@@ -128,21 +132,9 @@ if __name__ == "__main__":
 
 		#====================== Data Typing =======================
 
-		# Find data types of all values in the column
-		# def findType(x):
-		# 	return str(type(x))
+		# array of possible column datatypes
+		dtypes = [header_dtype]
 
-		# udftype = udf(findType, StringType())
-		# column_types = dataset.rdd.map(lambda x: (x[attr], udftype(x[attr]))).toDF()
-		# column_types.show()
-		# type_counts = column_types.groupBy("_2").count().alias("count_types")
-		# type_counts.show()
-
-		# Drop all empty cells from dataset
-		# cleaned_dataset = dataset.dropna(how='any') # drop the entire row if any cells are NaN in it
-
-		# be wary of entry 's', 'R' ...
-		
 		column = {
 			"column_name": attr,
 			"number_non_empty_cells": num_col_notempty,
@@ -152,137 +144,142 @@ if __name__ == "__main__":
 			"data_types": []
 			}
 
-
-		# work with list of dtypes per columns, check " 'int' in dtypes ", filter columns for these specific types
 		# Fixed misclassified datatypes
-		if(dtype == 'string'):
+		if(header_dtype == 'string'):
 
 			# Check if string column contains numeric values casted as strings:
-			num_non_ints = cleaned_dataset.select(attr, col(attr).cast("float").isNotNull().alias("Value")).filter(col("Value") == False).count() # count number of non INT entries
-			
-			if(num_non_ints > 0): # at least one entry is not a pure number
-				if(num_non_ints / num_col_values <= 0.1): # if it appears in more than 10% of the columns, it is most likely not an INT column
-					cleaned_dataset = cleaned_dataset.select(attr, col(attr).cast("float").isNotNull().alias("Value")).filter(col("Value") == True) # remove the non INT entries
-					dtype = 'int'
-			else:
-				dtype = 'int'
+			num_ints = cleaned_dataset.select(attr, col(attr).cast("int").isNotNull().alias("isINT")).filter(col("isINT") == True).count() # count number of INT entries
+			if(num_ints > 0): # at least one entry is a number
+				dtypes.append('int')
 
 		# classifying numeric columns representing dates as 'date'
 		attr_ = attr + " " # verifying label is actually for a date (avoids cases when "yearly" or "years" etc.)
 		if('year ' in attr_.lower() or 'day ' in attr_.lower() or 'month ' in attr_.lower() or 'period' in attr_.lower() or 'week ' in attr_.lower() or 'date ' in attr_.lower()):
-			dtype = 'date'
+			dtypes = ['date']
 
 
-		print(dtype)
-
+		print(dtypes)
 
 		#================== Column-Type Profiling ===================
 
-		if(dtype == 'int' or dtype == 'double' or dtype == 'float' or dtype == 'long'):
-			
-			stats = cleaned_dataset.agg(max(col(attr)).alias("max"), min(col(attr)).alias("min"), mean(col(attr)).alias("mean"), stddev(col(attr)).alias("stddev"))
-			col_max = stats.collect()[0]["max"]
-			col_min = stats.collect()[0]["min"]
-			col_mean = stats.collect()[0]["mean"]
-			col_stddev = stats.collect()[0]["stddev"]
+		for dtype in dtypes:
 
-			# Add column to JSON
-			column["data_types"].append({
-					"type": "INTEGER (LONG)",
-					"count": 0, ################ UPDATE THIS #############################
-					"max_value": col_max,
-					"min_value": col_min,
-					"mean": col_mean,
-					"stddev": col_stddev
-				})
-
-		elif(dtype == 'date'):
-			
-			# Fetch the earliest and latest dates
-
-			# For non timestamp date formats (just years, months, etc.)
-			if('year' in attr.lower() or 'day' in attr.lower() or 'month' in attr.lower() or 'period' in attr.lower() or 'week' in attr.lower()):
-
-				if(attribute_types[attr] == 'string'):
-
-					# replace string month with its numerical equivalent (e.g. Jan -> 1, Feb -> 2, ...)
-					def findDate(x):
-						months = ['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december']
-						for month in months:
-							lower_x = x.lower()
-							x_month_index = lower_x.find(month)
-							
-							if(x_month_index != -1):
-								date = str(months.index(month)) + " " + x[x_month_index+len(month):]
-								return date
-
-						return x # if string month is not present, just return original date string
-
-					udfdatefind = udf(findDate, StringType())
-					cleaned_dataset = cleaned_dataset.withColumn(attr, udfdatefind(attr))
-
-				# compute column max and min values
-				stats = cleaned_dataset.agg(max(col(attr)).alias("max"), min(col(attr)).alias("min"))
+			if(dtype == 'int' or dtype == 'double' or dtype == 'float' or dtype == 'long'):
+				cleaned_dataset_ints = cleaned_dataset.select(attr, col(attr).cast("int").isNotNull().alias("isINT")).filter(col("isINT") == True) # remove possible non INT entries
+				int_count = cleaned_dataset_ints.count()
+				
+				cleaned_dataset_ints = cleaned_dataset_ints.withColumn(attr, col(attr).cast("int"))
+				stats = cleaned_dataset_ints.agg(max(col(attr)).alias("max"), min(col(attr)).alias("min"), mean(col(attr)).alias("mean"), stddev(col(attr)).alias("stddev"))
 				col_max = stats.collect()[0]["max"]
 				col_min = stats.collect()[0]["min"]
+				col_mean = stats.collect()[0]["mean"]
+				col_stddev = stats.collect()[0]["stddev"]
 
-			else: # for formatted data
+				# Add column to JSON
+				column["data_types"].append({
+						"type": "INTEGER (LONG)",
+						"count": int_count,
+						"max_value": col_max,
+						"min_value": col_min,
+						"mean": col_mean,
+						"stddev": col_stddev
+					})
 
-				if(attribute_types[attr] == 'string'): # stored as strings
-					dates = cleaned_dataset.select(col(attr), 
-						when(to_date(col(attr),"yyyy-MM-dd").isNotNull(), to_date(col(attr),"yyyy-MM-dd"))
-						.when(to_date(col(attr),"yyyy MM dd").isNotNull(), to_date(col(attr),"yyyy MM dd"))
-						.when(to_date(col(attr),"MM/dd/yyyy").isNotNull(), to_date(col(attr),"MM/dd/yyyy"))
-						.when(to_date(col(attr),"yyyy MMMM dd").isNotNull(), to_date(col(attr),"yyyy MMMM dd"))
-						.when(to_date(col(attr),"yyyy MMMM dd E").isNotNull(), to_date(col(attr),"yyyy MMMM dd E"))
-						.otherwise("Unknown Format").alias("Formatted Date"))
+			elif(dtype == 'date'):
+				
+				# Fetch the earliest and latest dates
 
-					dates = dates.filter(col("Formatted Date") != "Unknown Format") # ignore dates that could not be formatted
-					sorted_dates = dates.select("Formatted Date").orderBy(dates["Formatted Date"].desc())
-					stats = sorted_dates.select(first("Formatted Date").alias("latest_date"), last("Formatted Date").alias("earliest_date")).collect()
-					col_max = stats[0]["latest_date"]
-					col_min = stats[0]["earliest_date"]
+				# For non date formats (just years, months, etc.)
+				if('year' in attr.lower() or 'day' in attr.lower() or 'month' in attr.lower() or 'period' in attr.lower() or 'week' in attr.lower()):
 
-				else: # stored in timestamp format
-					sorted_dates = cleaned_dataset.select(attr).orderBy(cleaned_dataset[attr].desc())
-					stats = sorted_dates.select(first(attr).alias("latest_date"), last(attr).alias("earliest_date")).collect()
-					col_max = stats[0]["latest_date"]
-					col_min = stats[0]["earliest_date"]
+					if(header_dtype == 'string'):
 
-			# Add column to JSON
-			column["data_types"].append({
-					"type": "DATE/TIME",
-					"count": 0, ################ UPDATE THIS #############################
-					"max_value": col_max,
-					"min_value": col_min
-				})
+						# replace string month with its numerical equivalent (e.g. Jan -> 1, Feb -> 2, ...)
+						def findDate(x):
+							months = ['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december']
+							for month in months:
+								lower_x = x.lower()
+								x_month_index = lower_x.find(month)
+								
+								if(x_month_index != -1):
+									date = str(months.index(month)) + " " + x[x_month_index+len(month):]
+									return date
 
-		elif(dtype == 'string'):
-			
-			# Find top-5 longest strings
-			text_lengths = cleaned_dataset.withColumn("length", length(attr))			
-			text_lengths = text_lengths.orderBy(text_lengths.length.desc())
-			max_5 = text_lengths.limit(5).collect()
+							return x # if string month is not present, just return original date string
 
-			max_5_length = [row[attr] for row in max_5] # save the string values
+						udfdatefind = udf(findDate, StringType())
+						cleaned_dataset = cleaned_dataset.withColumn(attr, udfdatefind(attr))
 
-			# Find the top-5 shortest words
-			text_lengths = text_lengths.orderBy(text_lengths.length.asc())
-			min_5 = text_lengths.limit(5).collect()
+					# compute column max and min values
+					stats = cleaned_dataset.agg(max(col(attr)).alias("max"), min(col(attr)).alias("min"), count(col(attr)).alias("date_count")).collect()
+					col_max = stats[0]["max"]
+					col_min = stats[0]["min"]
+					date_count = stats[0]["date_count"]
 
-			min_5_length = [row[attr] for row in min_5]
+				else: # for formatted data
 
-			# Find average string length
-			avg_length = text_lengths.agg(mean(col("length")).alias("mean")).collect()[0]["mean"]
-			
-			# Add column to JSON
-			column["data_types"].append({
-				"type": "TEXT",
-				"count": 0, ################ UPDATE THIS #############################
-				"shortest_values": min_5_length,
-				"longest_values": max_5_length,
-				"average_length": avg_length
-				})
+					if(header_dtype == 'string'): # stored as strings
+						dates = cleaned_dataset.select(col(attr), 
+							when(to_date(col(attr),"yyyy-MM-dd").isNotNull(), to_date(col(attr),"yyyy-MM-dd"))
+							.when(to_date(col(attr),"yyyy MM dd").isNotNull(), to_date(col(attr),"yyyy MM dd"))
+							.when(to_date(col(attr),"MM/dd/yyyy").isNotNull(), to_date(col(attr),"MM/dd/yyyy"))
+							.when(to_date(col(attr),"yyyy MMMM dd").isNotNull(), to_date(col(attr),"yyyy MMMM dd"))
+							.when(to_date(col(attr),"yyyy MMMM dd E").isNotNull(), to_date(col(attr),"yyyy MMMM dd E"))
+							.otherwise("Unknown Format").alias("Formatted Date"))
+
+						dates = dates.filter(col("Formatted Date") != "Unknown Format") # ignore dates that could not be formatted
+						sorted_dates = dates.select("Formatted Date").orderBy(dates["Formatted Date"].desc())
+						stats = sorted_dates.select(first("Formatted Date").alias("latest_date"), last("Formatted Date").alias("earliest_date"), count(col("Formatted Date")).alias("date_count")).collect()
+						col_max = stats[0]["latest_date"]
+						col_min = stats[0]["earliest_date"]
+						date_count = stats[0]["date_count"]
+
+					else: # stored in timestamp format
+						sorted_dates = cleaned_dataset.select(attr).orderBy(cleaned_dataset[attr].desc())
+						stats = sorted_dates.select(first(attr).alias("latest_date"), last(attr).alias("earliest_date"), count(col(attr)).alias("date_count")).collect()
+						col_max = stats[0]["latest_date"]
+						col_min = stats[0]["earliest_date"]
+						date_count = stats[0]["date_count"]
+
+				# Add column to JSON
+				column["data_types"].append({
+						"type": "DATE/TIME",
+						"count": date_count,
+						"max_value": col_max,
+						"min_value": col_min
+					})
+
+			elif(dtype == 'string'):
+				cleaned_dataset_string = cleaned_dataset.select(attr, col(attr).cast("float").isNotNull().alias("isINT")).filter(col("isINT") == False) # remove possible INT entries
+				
+				text_lengths = cleaned_dataset_string.withColumn("length", length(attr))
+				
+				# Find top-5 longest strings						
+				text_lengths = text_lengths.orderBy(text_lengths.length.desc())
+				max_5 = text_lengths.limit(5).collect()
+
+				max_5_length = [row[attr] for row in max_5] # save the string values
+
+				# Find the top-5 shortest words
+				text_lengths = text_lengths.orderBy(text_lengths.length.asc())
+				min_5 = text_lengths.limit(5).collect()
+
+				min_5_length = [row[attr] for row in min_5]
+
+				# Find average string length
+				avg_length = text_lengths.agg(mean(col("length")).alias("mean")).collect()[0]["mean"]
+				
+				# Count number of string entries
+				text_count  = cleaned_dataset_string.count()
+
+				# Add column to JSON
+				column["data_types"].append({
+					"type": "TEXT",
+					"count": text_count,
+					"shortest_values": min_5_length,
+					"longest_values": max_5_length,
+					"average_length": avg_length
+					})
 
 		# add the column to the dataset dictionary
 		dataset_dict["columns"].append(column)
