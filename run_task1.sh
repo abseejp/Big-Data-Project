@@ -7,7 +7,7 @@
 for filename in /scratch/mva271/NYCOpenData/*.gz; do
 	# /usr/bin/hadoop fs -put "$filename"
 	echo "${filename##*/}"
-	read -p 'skip this file? (y/n):' skipvar
+	read -p 'skip this file (y/n)?: ' skipvar
 	if [ "$skipvar" = "n" ]
 	then
     	spark-submit --conf spark.pyspark.python=$PYSPARK_PYTHON profiling.py "${filename##*/}"
