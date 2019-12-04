@@ -46,8 +46,6 @@ if __name__ == "__main__":
 	dataset = dataset.select([col(c).alias(c.replace(".", "").replace("`", "")) for c in ["`" + x + "`" for x in dataset.columns]]) # pyspark cannot handle '.' in headers
 	attributes = dataset.columns
 
-#=================== General DF Operations ====================
-
 	# Count all values for a column
 	num_col_values = dataset.count()
 	print("num_col_values:", num_col_values)
@@ -55,7 +53,7 @@ if __name__ == "__main__":
 	# Attribute Data Type array
 	attribute_types = dict(dataset.dtypes)
 
-#=================== Storage Data Structures ====================
+#===================== Storage Dictionary ======================
 
 	dataset_dict = {
 		"dataset_name": inFile,
@@ -89,7 +87,7 @@ if __name__ == "__main__":
 
 		# ****** Remove junk from dataset ******
 		cleaned_dataset = dataset.exceptAll(dataset.filter(col(attr).isNull())) # drop the entire row if any cells are empty in it
-		cleaned_dataset = cleaned_dataset.exceptAll(cleaned_dataset.filter(cleaned_dataset[attr].rlike('No Data|NA|N\\A|None'))) # remove entries with 'No Data', 'NA'
+		cleaned_dataset = cleaned_dataset.exceptAll(cleaned_dataset.filter(cleaned_dataset[attr].rlike('No Data|NA|N\\A|None'))) # remove entries with 'No Data', 'NA', 'None'
 		# **************************************
 
 		if(dtype == 'string'):
@@ -138,12 +136,7 @@ if __name__ == "__main__":
 		# Drop all empty cells from dataset
 		# cleaned_dataset = dataset.dropna(how='any') # drop the entire row if any cells are NaN in it
 
-
-
 		# be wary of entry 's', 'R' ...
-
-
-		#================== Column-Type Profiling ===================
 		
 		column = {
 			"column_name": attr,
@@ -170,14 +163,16 @@ if __name__ == "__main__":
 				dtype = 'int'
 
 		# classifying numeric columns representing dates as 'date'
-		# if(('year' in attr.lower() and len(attr) == 4) or ('day' in attr.lower() and len(attr) == 3) or ('month' in attr.lower() and len(attr) == 5) or 'period' in attr.lower() or ('week' in attr.lower() and len(attr) == 4)):
-		if('year' in attr.lower() or 'day' in attr.lower() or 'month' in attr.lower() or 'period' in attr.lower() or 'week' in attr.lower()):
+		attr_ = attr + " " # verifying label is actually for a date (avoids cases when "yearly" or "years" etc.)
+		if('year ' in attr_.lower() or 'day ' in attr_.lower() or 'month ' in attr_.lower() or 'period' in attr_.lower() or 'week ' in attr_.lower()):
 			dtype = 'date'
 
 
 		print(dtype)
 
-		# Profile the column based on datatype
+
+		#================== Column-Type Profiling ===================
+
 		if(dtype == 'int' or dtype == 'double' or dtype == 'float' or dtype == 'long'):
 			
 			stats = cleaned_dataset.agg(max(col(attr)).alias("max"), min(col(attr)).alias("min"), mean(col(attr)).alias("mean"), stddev(col(attr)).alias("stddev"))
@@ -197,11 +192,15 @@ if __name__ == "__main__":
 				})
 
 		elif(dtype == 'date'):
+			
 			# Fetch the earliest and latest dates
 
+			# For non timestamp date formats (just years, months, etc.)
 			if('year' in attr.lower() or 'day' in attr.lower() or 'month' in attr.lower() or 'period' in attr.lower() or 'week' in attr.lower()):
 
 				if(attribute_types[attr] == 'string'):
+
+					# replace string month with its numerical equivalent (e.g. Jan -> 1, Feb -> 2, ...)
 					def findDate(x):
 						months = ['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december']
 						for month in months:
@@ -209,7 +208,7 @@ if __name__ == "__main__":
 							x_month_index = lower_x.find(month)
 							
 							if(x_month_index != -1):
-								date = str(months.index(month)) + " " + x[x_month_index+len(month):] # replace string month with its numerical equivalent (e.g. Jan -> 1, Feb -> 2, ...)
+								date = str(months.index(month)) + " " + x[x_month_index+len(month):]
 								return date
 
 						return x # if string month is not present, just return original date string
@@ -217,13 +216,16 @@ if __name__ == "__main__":
 					udfdatefind = udf(findDate, StringType())
 					cleaned_dataset = cleaned_dataset.withColumn(attr, udfdatefind(attr))
 
+				# compute column max and min values
 				stats = cleaned_dataset.agg(max(col(attr)).alias("max"), min(col(attr)).alias("min"))
 				col_max = stats.collect()[0]["max"]
-				col_min = stats.collect()[0]["min"]			
-			else:
+				col_min = stats.collect()[0]["min"]
+
+			else: # for timestamp formatted data
 				sorted_dates = cleaned_dataset.select(attr).orderBy(cleaned_dataset[attr].desc())
 				col_max = sorted_dates.first()
 				col_min = sorted_dates.last()
+
 				# TRYING TO BREAK ON A TRUE DATE COLUMN FOR DEBUGGING
 				text_lengths = df.orderBy(text_lengths.cars.desc())
 
@@ -262,6 +264,7 @@ if __name__ == "__main__":
 				"average_length": avg_length
 				})
 
+		# add the column to the dataset dictionary
 		dataset_dict["columns"].append(column)
 
 	#================== Saving as JSON file =====================
