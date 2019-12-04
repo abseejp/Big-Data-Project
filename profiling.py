@@ -34,7 +34,7 @@ if __name__ == "__main__":
 
 	print ("Executing data profiling with input from " + inFile)
 
-	dataset = sqlContext.read.format('csv').options(header='true', inferschema='true', delimiter='\t', ignoreLeadingWhiteSpace='true', ignoreTrailingWhiteSpace='true', emptyValues='Null').load(inFile)
+	dataset = sqlContext.read.format('csv').options(header='true', inferschema='true', delimiter='\t', ignoreLeadingWhiteSpace='true', ignoreTrailingWhiteSpace='true').load(inFile)
 	dataset.createOrReplaceTempView("dataset")
 	sqlContext.cacheTable("dataset")
 
@@ -62,7 +62,7 @@ if __name__ == "__main__":
 	}
 
 #================== Loop through every column ===================
-
+	attributes = ['DOING BUSINESS START DATE']
 	for attr in attributes:
 		print("")
 		print(attr)
@@ -84,19 +84,24 @@ if __name__ == "__main__":
 		# Count all non-empty values for a column
 		num_col_notempty = num_col_values - num_col_empty
 		print("num_col_notempty:", num_col_notempty)
+		
 
-		# ****** Remove junk from dataset ******
+		# ************ Remove junk from dataset ************
+
 		cleaned_dataset = dataset.exceptAll(dataset.filter(col(attr).isNull())) # drop the entire row if any cells are empty in it
-		cleaned_dataset = cleaned_dataset.exceptAll(cleaned_dataset.filter(cleaned_dataset[attr].rlike('No Data|NA|N\\A|None'))) # remove entries with 'No Data', 'NA', 'None'
-		# **************************************
-
+		cleaned_dataset = cleaned_dataset.exceptAll(cleaned_dataset.filter(cleaned_dataset[attr].rlike('^$|No Data|NA|N\\A|None'))) # remove entries with 'No Data', 'NA', 'None'
+		
+		# **************************************************
+		
+		"""
+		# convert string encodings into ascii if special characters appear
 		if(dtype == 'string'):
-			# ignore any characters in string that are not UTF-8 encoded
 			def fix_encoding(x):
 				return x.encode("ascii", "ignore").decode("ascii")
 			udfencode = udf(fix_encoding, StringType())
 			cleaned_dataset = cleaned_dataset.withColumn(attr, udfencode(attr))	
 			cleaned_dataset = cleaned_dataset.exceptAll(cleaned_dataset.filter(cleaned_dataset[attr].rlike('\\*|^$|%'))) # remove garbage values from conversion
+		"""
 
 		# Count number of distinct values
 		num_distinct_col_values = cleaned_dataset.agg(countDistinct(col(attr)).alias("count_distinct")).collect()[0]["count_distinct"]
@@ -114,12 +119,12 @@ if __name__ == "__main__":
 
 		# Find number of frequent values
 		# need to retrieve sets of size 2, 3, and 4
-		itemSets = cleaned_dataset.na.drop() # need to remove Null values to avoid error
-		itemSets = itemSets.freqItems([attr], support=(4 / num_col_values))
+		# itemSets = cleaned_dataset.na.drop() # need to remove Null values to avoid error
+		# itemSets = itemSets.freqItems([attr], support=(0.1))
 
-		arrlen_udf = udf(lambda s: len(s), IntegerType())
-		num_freq_items = itemSets.withColumn("size", arrlen_udf(itemSets[attr + "_freqItems"])).collect()[0]["size"]
-		print("num_freq_items:", num_freq_items)
+		# arrlen_udf = udf(lambda s: len(s), IntegerType())
+		# num_freq_items = itemSets.withColumn("size", arrlen_udf(itemSets[attr + "_freqItems"])).collect()[0]["size"]
+		# print("num_freq_items:", num_freq_items)
 
 		#====================== Data Typing =======================
 
@@ -143,7 +148,7 @@ if __name__ == "__main__":
 			"number_non_empty_cells": num_col_notempty,
 			"number_empty_cells": num_col_empty,
 			"number_distinct_values": num_distinct_col_values,
-			"frequent_values": num_freq_items,
+			"frequent_values": top_5_frequent,
 			"data_types": []
 			}
 
@@ -164,7 +169,7 @@ if __name__ == "__main__":
 
 		# classifying numeric columns representing dates as 'date'
 		attr_ = attr + " " # verifying label is actually for a date (avoids cases when "yearly" or "years" etc.)
-		if('year ' in attr_.lower() or 'day ' in attr_.lower() or 'month ' in attr_.lower() or 'period' in attr_.lower() or 'week ' in attr_.lower()):
+		if('year ' in attr_.lower() or 'day ' in attr_.lower() or 'month ' in attr_.lower() or 'period' in attr_.lower() or 'week ' in attr_.lower() or 'date ' in attr_.lower()):
 			dtype = 'date'
 
 
@@ -221,13 +226,28 @@ if __name__ == "__main__":
 				col_max = stats.collect()[0]["max"]
 				col_min = stats.collect()[0]["min"]
 
-			else: # for timestamp formatted data
-				sorted_dates = cleaned_dataset.select(attr).orderBy(cleaned_dataset[attr].desc())
-				col_max = sorted_dates.first()
-				col_min = sorted_dates.last()
+			else: # for formatted data
 
-				# TRYING TO BREAK ON A TRUE DATE COLUMN FOR DEBUGGING
-				text_lengths = df.orderBy(text_lengths.cars.desc())
+				if(attribute_types[attr] == 'string'): # stored as strings
+					dates = cleaned_dataset.select(col(attr), 
+						when(to_date(col(attr),"yyyy-MM-dd").isNotNull(), to_date(col(attr),"yyyy-MM-dd"))
+						.when(to_date(col(attr),"yyyy MM dd").isNotNull(), to_date(col(attr),"yyyy MM dd"))
+						.when(to_date(col(attr),"MM/dd/yyyy").isNotNull(), to_date(col(attr),"MM/dd/yyyy"))
+						.when(to_date(col(attr),"yyyy MMMM dd").isNotNull(), to_date(col(attr),"yyyy MMMM dd"))
+						.when(to_date(col(attr),"yyyy MMMM dd E").isNotNull(), to_date(col(attr),"yyyy MMMM dd E"))
+						.otherwise("Unknown Format").alias("Formatted Date"))
+
+					dates = dates.filter(col("Formatted Date") != "Unknown Format") # ignore dates that could not be formatted
+					sorted_dates = dates.select("Formatted Date").orderBy(dates["Formatted Date"].desc())
+					stats = sorted_dates.select(first("Formatted Date").alias("latest_date"), last("Formatted Date").alias("earliest_date")).collect()
+					col_max = stats[0]["latest_date"]
+					col_min = stats[0]["earliest_date"]
+
+				else: # stored in timestamp format
+					sorted_dates = cleaned_dataset.select(attr).orderBy(cleaned_dataset[attr].desc())
+					stats = sorted_dates.select(first(attr).alias("latest_date"), last(attr).alias("earliest_date")).collect()
+					col_max = stats[0]["latest_date"]
+					col_min = stats[0]["earliest_date"]
 
 			# Add column to JSON
 			column["data_types"].append({
@@ -266,6 +286,8 @@ if __name__ == "__main__":
 
 		# add the column to the dataset dictionary
 		dataset_dict["columns"].append(column)
+
+
 
 	#================== Saving as JSON file =====================
 
