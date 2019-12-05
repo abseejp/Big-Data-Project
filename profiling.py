@@ -61,6 +61,7 @@ if __name__ == "__main__":
 		"columns": [],
 		"key_column_candidates": []
 	}
+	found_single_key = False
 
 #================== Loop through every column ===================
 
@@ -74,13 +75,13 @@ if __name__ == "__main__":
 		val_count = dataset.groupBy(attr).agg(count(col(attr)).alias("val_count"))
 		
 		# Count all empty values for a column
-		num_col_labeled_empty = val_count.filter(col(attr).rlike('\\*|^$|No Data|NA|N\\A|None|null')).collect()
+		num_col_labeled_empty = val_count.filter(col(attr).rlike('\\*|^$|No Data|NA|N/A|None|null|s')).collect()
 		if(len(num_col_labeled_empty) > 0):
 			num_col_labeled_empty = num_col_labeled_empty[0]["val_count"]
 		else:
 			num_col_labeled_empty = 0
 
-		num_col_null = dataset.select(col(attr).isNull()).count()
+		num_col_null = dataset.filter(col(attr).isNull()).count()
 		num_col_empty = num_col_null + num_col_labeled_empty
 		print("num_col_empty:", num_col_empty)
 
@@ -92,8 +93,8 @@ if __name__ == "__main__":
 		
 		# ************ Remove junk from dataset ************
 
-		cleaned_dataset = dataset.exceptAll(dataset.filter(col(attr).isNull())) # drop the entire row if any cells are empty in it
-		cleaned_dataset = cleaned_dataset.exceptAll(cleaned_dataset.filter(cleaned_dataset[attr].rlike('^$|No Data|NA|N\\A|None|%|null'))) # remove entries with 'No Data', 'NA', 'None'
+		cleaned_dataset = dataset.filter(col(attr).isNotNull()) # drop the entire row if any cells are empty in it
+		cleaned_dataset = cleaned_dataset.exceptAll(cleaned_dataset.filter(cleaned_dataset[attr].rlike('^$|No Data|NA|N/A|None|%|null|s'))) # remove entries with 'No Data', 'NA', 'None'
 		
 		# **************************************************
 		
@@ -112,8 +113,14 @@ if __name__ == "__main__":
 		print("num_distinct_col_values:", num_distinct_col_values)
 		
 		# Finding potential primary keys
-		if(num_distinct_col_values >= num_col_values*0.9 and num_col_empty == 0):
-			dataset_dict["key_column_candidates"].append(attr)
+		if(not found_single_key):
+			
+			if(num_distinct_col_values == num_col_values): # found a perfectly unique column to serve as the primary key
+				dataset_dict["key_column_candidates"].append(attr)
+				found_single_key = True
+			elif(num_distinct_col_values >= num_col_values*0.9 and num_col_empty == 0):
+				dataset_dict["key_column_candidates"].append(attr)
+
 		# Top 5 most frequent values
 		cleaned_count = cleaned_dataset.groupBy(attr).agg(count(col(attr)).alias("val_count"))
 		top_5_frequent = cleaned_count.orderBy(cleaned_count["val_count"].desc())
@@ -164,7 +171,7 @@ if __name__ == "__main__":
 
 		for dtype in dtypes:
 
-			if(dtype == 'int' or dtype == 'double' or dtype == 'float' or dtype == 'long'):
+			if(dtype == 'int' or dtype == 'double' or dtype == 'float' or dtype == 'long' or dtype == 'bigint'):
 				cleaned_dataset_ints = cleaned_dataset.select(attr, col(attr).cast("int").isNotNull().alias("isINT")).filter(col("isINT") == True) # remove possible non INT entries
 				int_count = cleaned_dataset_ints.count()
 				
