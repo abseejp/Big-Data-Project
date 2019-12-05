@@ -75,7 +75,7 @@ if __name__ == "__main__":
 		val_count = dataset.groupBy(attr).agg(count(col(attr)).alias("val_count"))
 		
 		# Count all empty values for a column
-		num_col_labeled_empty = val_count.filter(col(attr).rlike('\\*|^$|No Data|NA|N/A|None|null|s')).collect()
+		num_col_labeled_empty = val_count.filter(col(attr).rlike('\\*|^$|No Data|NA|N/A|None|null|s|^___')).collect()
 		if(len(num_col_labeled_empty) > 0):
 			num_col_labeled_empty = num_col_labeled_empty[0]["val_count"]
 		else:
@@ -94,7 +94,7 @@ if __name__ == "__main__":
 		# ************ Remove junk from dataset ************
 
 		cleaned_dataset = dataset.filter(col(attr).isNotNull()) # drop the entire row if any cells are empty in it
-		cleaned_dataset = cleaned_dataset.exceptAll(cleaned_dataset.filter(cleaned_dataset[attr].rlike('^$|No Data|NA|N/A|None|%|null|s'))) # remove entries with 'No Data', 'NA', 'None'
+		cleaned_dataset = cleaned_dataset.exceptAll(cleaned_dataset.filter(cleaned_dataset[attr].rlike('^$|No Data|NA|N/A|None|null|s|^___'))) # remove entries with 'No Data', 'NA', 'None' etc.
 		
 		# **************************************************
 		
@@ -161,8 +161,12 @@ if __name__ == "__main__":
 
 		# classifying numeric columns representing dates as 'date'
 		attr_ = attr + " " # verifying label is actually for a date (avoids cases when "yearly" or "years" etc.)
-		if('year ' in attr_.lower() or 'day ' in attr_.lower() or 'month ' in attr_.lower() or 'period' in attr_.lower() or 'week ' in attr_.lower() or 'date ' in attr_.lower()):
-			dtypes = ['date']
+		if('year ' in attr_.lower() or 'day ' in attr_.lower() or 'month ' in attr_.lower() or 'period' in attr_.lower() or 'week ' in attr_.lower() or 'date ' in attr_.lower() or 'started' in attr_.lower() or 'completed' in attr.lower() or 'time' in attr.lower()):
+			
+			if(cleaned_dataset.filter(col(attr).rlike("\\p{L}")).count() > 0): #  if any strings containing letters are found, include dtype
+				dtypes.append('date')
+			else:
+				dtypes = ['date']
 
 
 		print(dtypes)
@@ -258,7 +262,8 @@ if __name__ == "__main__":
 
 			elif(dtype == 'string'):
 				cleaned_dataset_string = cleaned_dataset.select(attr, col(attr).cast("float").isNotNull().alias("isINT")).filter(col("isINT") == False) # remove possible INT entries
-				
+				# cleaned_dataset_string = cleaned_dataset.filter(col(attr).rlike("\\p{L}")) # filter for rows that contain letters
+
 				text_lengths = cleaned_dataset_string.withColumn("length", length(attr))
 				
 				# Find top-5 longest strings						
