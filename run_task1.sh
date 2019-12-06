@@ -4,12 +4,14 @@
 
 # /usr/bin/hadoop fs -get "/user/hm74/NYCOpenData" "/scratch/mva271"
 
-for filename in /scratch/mva271/NYCOpenData/*.gz; do
-	# /usr/bin/hadoop fs -put "$filename"
-	echo "${filename##*/}"
-	read -p 'skip this file (y/n)?: ' skipvar
-	if [ "$skipvar" = "n" ]
-	then
-    	spark-submit --conf spark.pyspark.python=$PYSPARK_PYTHON profiling.py "${filename##*/}"
-    fi
-done
+input="/scratch/mva271/NYCOpenData/files.txt"
+while IFS= read -r line
+do
+	# /usr/bin/hadoop fs -put "$line"
+	# echo "$line"
+	# read -p 'skip this file (y/n)?: ' skipvar
+	# if [ "$skipvar" = "n" ]
+	# then
+	spark-submit --conf spark.pyspark.python=$PYSPARK_PYTHON profiling.py "$line"
+    # fi
+done < "$input"
