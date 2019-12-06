@@ -79,7 +79,7 @@ if __name__ == "__main__":
 		val_count = dataset.groupBy(attr).agg(count(col(attr)).alias("val_count"))
 		
 		# Count all empty values for a column
-		num_col_labeled_empty = val_count.filter(col(attr).rlike('\\*|^$|No Data|NA|N/A|None|null|^s$|^___')).collect()
+		num_col_labeled_empty = val_count.filter(col(attr).rlike('\\*|^$|\\.|No Data|NA|N/A|None|null|^s$|^___')).collect()
 		if(len(num_col_labeled_empty) > 0):
 			num_col_labeled_empty = num_col_labeled_empty[0]["val_count"]
 		else:
@@ -106,7 +106,7 @@ if __name__ == "__main__":
 			# ************ Remove junk from dataset ************
 
 				cleaned_dataset = dataset.filter(col(attr).isNotNull()) # drop the entire row if any cells are empty in it
-				cleaned_dataset = cleaned_dataset.exceptAll(cleaned_dataset.filter(cleaned_dataset[attr].rlike('\\*|^$|No Data|NA|N/A|None|null|^s$|^___'))) # remove entries with 'No Data', 'NA', 'None' etc.
+				cleaned_dataset = cleaned_dataset.exceptAll(cleaned_dataset.filter(cleaned_dataset[attr].rlike('\\*|^$|\\.|No Data|NA|N/A|None|null|^s$|^___'))) # remove entries with 'No Data', 'NA', 'None' etc.
 						
 			else:
 				cleaned_dataset = dataset
