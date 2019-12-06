@@ -179,7 +179,9 @@ if __name__ == "__main__":
 
 			# Check if string column contains numeric values casted as strings:
 			num_ints = cleaned_dataset.select(attr, col(attr).cast("int").isNotNull().alias("isINT")).filter(col("isINT") == True).count() # count number of INT entries
-			if(num_ints > 0 and "phone " not in attr_): # at least one entry is a number
+			if(num_ints == num_distinct_col_values):
+				dtypes = ['int']
+			elif(num_ints > 0 and "phone " not in attr_): # at least one entry is a number
 				dtypes.append('int')
 
 		# classifying numeric columns representing dates as 'date'
