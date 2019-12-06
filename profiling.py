@@ -43,11 +43,15 @@ if __name__ == "__main__":
 
 	dataset.printSchema()
 
-	dataset = dataset.select([col(c).alias(c.replace(".", "").replace("`", "")) for c in ["`" + x + "`" for x in dataset.columns]]) # pyspark cannot handle '.' in headers
 	attributes = dataset.columns
 
 	# Count all values for a column
-	num_col_values = dataset.count()
+	try:
+		num_col_values = dataset.count()
+	except: # if error is thrown, assume it's due to improper header formatting
+		dataset = dataset.select([col(c).alias(c.replace(".", "").replace("`", "")) for c in ["`" + x + "`" for x in dataset.columns]]) # pyspark cannot handle '.' in headers
+		num_col_values = dataset.count()
+
 	print("num_col_values:", num_col_values)
 
 	# Header data type dictionary
@@ -75,7 +79,7 @@ if __name__ == "__main__":
 		val_count = dataset.groupBy(attr).agg(count(col(attr)).alias("val_count"))
 		
 		# Count all empty values for a column
-		num_col_labeled_empty = val_count.filter(col(attr).rlike('\\*|^$|No Data|NA|N/A|None|null|s|^___')).collect()
+		num_col_labeled_empty = val_count.filter(col(attr).rlike('\\*|^$|No Data|NA|N/A|None|null|^s$|^___')).collect()
 		if(len(num_col_labeled_empty) > 0):
 			num_col_labeled_empty = num_col_labeled_empty[0]["val_count"]
 		else:
@@ -94,7 +98,7 @@ if __name__ == "__main__":
 		# ************ Remove junk from dataset ************
 
 		cleaned_dataset = dataset.filter(col(attr).isNotNull()) # drop the entire row if any cells are empty in it
-		cleaned_dataset = cleaned_dataset.exceptAll(cleaned_dataset.filter(cleaned_dataset[attr].rlike('^$|No Data|NA|N/A|None|null|s|^___'))) # remove entries with 'No Data', 'NA', 'None' etc.
+		cleaned_dataset = cleaned_dataset.exceptAll(cleaned_dataset.filter(cleaned_dataset[attr].rlike('\\*|^$|No Data|NA|N/A|None|null|^s$|^___'))) # remove entries with 'No Data', 'NA', 'None' etc.
 		
 		# **************************************************
 		
@@ -152,16 +156,17 @@ if __name__ == "__main__":
 			}
 
 		# Fixed misclassified datatypes
+		attr_ = attr + " " # verifying label is actually for a date (avoids cases when "yearly" or "years" etc.)
+
 		if(header_dtype == 'string'):
 
 			# Check if string column contains numeric values casted as strings:
 			num_ints = cleaned_dataset.select(attr, col(attr).cast("int").isNotNull().alias("isINT")).filter(col("isINT") == True).count() # count number of INT entries
-			if(num_ints > 0): # at least one entry is a number
+			if(num_ints > 0 and "phone " not in attr_): # at least one entry is a number
 				dtypes.append('int')
 
 		# classifying numeric columns representing dates as 'date'
-		attr_ = attr + " " # verifying label is actually for a date (avoids cases when "yearly" or "years" etc.)
-		if('year ' in attr_.lower() or 'day ' in attr_.lower() or 'month ' in attr_.lower() or 'period' in attr_.lower() or 'week ' in attr_.lower() or 'date ' in attr_.lower() or 'started' in attr_.lower() or 'completed' in attr.lower() or 'time' in attr.lower()):
+		if('year ' in attr_.lower() or 'day ' in attr_.lower() or 'month ' in attr_.lower() or 'period' in attr_.lower() or 'week ' in attr_.lower() or 'date' in attr_.lower() or 'started' in attr_.lower() or 'completed' in attr.lower() or 'stamp' in attr.lower()):
 			
 			if(cleaned_dataset.filter(col(attr).rlike("\\p{L}")).count() > 0): #  if any strings containing letters are found, include dtype
 				dtypes.append('date')
@@ -261,29 +266,24 @@ if __name__ == "__main__":
 					})
 
 			elif(dtype == 'string'):
-				cleaned_dataset_string = cleaned_dataset.select(attr, col(attr).cast("float").isNotNull().alias("isINT")).filter(col("isINT") == False) # remove possible INT entries
+				cleaned_dataset_string = cleaned_dataset.select(attr, length(attr).alias("length"), col(attr).cast("float").isNotNull().alias("isINT")).filter(col("isINT") == False) # remove possible INT entries
 				# cleaned_dataset_string = cleaned_dataset.filter(col(attr).rlike("\\p{L}")) # filter for rows that contain letters
 
-				text_lengths = cleaned_dataset_string.withColumn("length", length(attr))
+				text_lengths = cleaned_dataset_string.orderBy(cleaned_dataset_string.length.desc()) # sort dataframe by "length" column
 				
 				# Find top-5 longest strings						
-				text_lengths = text_lengths.orderBy(text_lengths.length.desc())
-				max_5 = text_lengths.limit(5).collect()
+				arr_text_lengths = text_lengths.collect()
+				text_count = len(arr_text_lengths)
+
+				max_5 = arr_text_lengths[0:5] # first 5
+				min_5 = arr_text_lengths[text_count-5 : text_count] # last 5
 
 				max_5_length = [row[attr] for row in max_5] # save the string values
-
-				# Find the top-5 shortest words
-				text_lengths = text_lengths.orderBy(text_lengths.length.asc())
-				min_5 = text_lengths.limit(5).collect()
-
 				min_5_length = [row[attr] for row in min_5]
 
 				# Find average string length
 				avg_length = text_lengths.agg(mean(col("length")).alias("mean")).collect()[0]["mean"]
 				
-				# Count number of string entries
-				text_count  = cleaned_dataset_string.count()
-
 				# Add column to JSON
 				column["data_types"].append({
 					"type": "TEXT",
