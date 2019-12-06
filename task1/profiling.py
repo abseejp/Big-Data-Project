@@ -147,6 +147,7 @@ if __name__ == "__main__":
 			number_distinct_values = 0
 			top_5_frequent = []
 			dtypes = []
+
 		# Find number of frequent values
 		# need to retrieve sets of size 2, 3, and 4
 		# itemSets = cleaned_dataset.na.drop() # need to remove Null values to avoid error
@@ -180,7 +181,7 @@ if __name__ == "__main__":
 
 			# Check if string column contains numeric values casted as strings:
 			num_ints = cleaned_dataset.select(attr, col(attr).cast("int").isNotNull().alias("isINT")).filter(col("isINT") == True).count() # count number of INT entries
-			if(num_ints == num_distinct_col_values):
+			if(num_ints == num_col_notempty):
 				dtypes = ['int']
 			elif(num_ints > 0 and "phone " not in attr_): # at least one entry is a number
 				dtypes.append('int')
