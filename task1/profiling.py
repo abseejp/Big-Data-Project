@@ -174,8 +174,9 @@ if __name__ == "__main__":
 		# if no data is present, skip column
 		if(num_col_notempty == 0):
 			dtypes = []
+			continue
 
-		elif(header_dtype == 'string'):
+		if(dtypes[0] == 'string'):
 
 			# Check if string column contains numeric values casted as strings:
 			num_ints = cleaned_dataset.select(attr, col(attr).cast("int").isNotNull().alias("isINT")).filter(col("isINT") == True).count() # count number of INT entries
@@ -185,7 +186,7 @@ if __name__ == "__main__":
 				dtypes.append('int')
 
 		# classifying numeric columns representing dates as 'date'
-		elif('year ' in attr_.lower() or 'day ' in attr_.lower() or 'month ' in attr_.lower() or 'period' in attr_.lower() or 'week ' in attr_.lower() or 'date' in attr_.lower() or 'started' in attr_.lower() or 'completed' in attr.lower() or 'stamp' in attr.lower()):
+		if('year ' in attr_.lower() or 'day ' in attr_.lower() or 'month ' in attr_.lower() or 'period' in attr_.lower() or 'week ' in attr_.lower() or 'date' in attr_.lower() or 'started' in attr_.lower() or 'completed' in attr.lower() or 'stamp' in attr.lower()):
 			
 			if(cleaned_dataset.filter(col(attr).rlike("\\p{L}")).count() > 0): #  if any strings containing letters are found, include dtype
 				dtypes.append('date')
