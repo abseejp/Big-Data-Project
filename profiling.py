@@ -95,43 +95,58 @@ if __name__ == "__main__":
 			num_col_notempty = 0
 		print("num_col_notempty:", num_col_notempty)
 		
-		# ************ Remove junk from dataset ************
 
-		cleaned_dataset = dataset.filter(col(attr).isNotNull()) # drop the entire row if any cells are empty in it
-		cleaned_dataset = cleaned_dataset.exceptAll(cleaned_dataset.filter(cleaned_dataset[attr].rlike('\\*|^$|No Data|NA|N/A|None|null|^s$|^___'))) # remove entries with 'No Data', 'NA', 'None' etc.
-		
-		# **************************************************
-		
-		"""
-		# convert string encodings into ascii if special characters appear
-		if(header_dtype == 'string'):
-			def fix_encoding(x):
-				return x.encode("ascii", "ignore").decode("ascii")
-			udfencode = udf(fix_encoding, StringType())
-			cleaned_dataset = cleaned_dataset.withColumn(attr, udfencode(attr))	
-			cleaned_dataset = cleaned_dataset.exceptAll(cleaned_dataset.filter(cleaned_dataset[attr].rlike('\\*|^$|%'))) # remove garbage values from conversion
-		"""
 
-		# Count number of distinct values
-		num_distinct_col_values = cleaned_dataset.agg(countDistinct(col(attr)).alias("count_distinct")).collect()[0]["count_distinct"]
-		print("num_distinct_col_values:", num_distinct_col_values)
-		
-		# Finding potential primary keys
-		if(not found_single_key):
+		# Only do work when column isn't empty
+		if(num_col_notempty != 0):
+
+			# only clean the dataset if it has missing stuff
+			if(num_col_empty != 0):
+
+			# ************ Remove junk from dataset ************
+
+				cleaned_dataset = dataset.filter(col(attr).isNotNull()) # drop the entire row if any cells are empty in it
+				cleaned_dataset = cleaned_dataset.exceptAll(cleaned_dataset.filter(cleaned_dataset[attr].rlike('\\*|^$|No Data|NA|N/A|None|null|^s$|^___'))) # remove entries with 'No Data', 'NA', 'None' etc.
+						
+			else:
+				cleaned_dataset = dataset
+
+			"""
+			# convert string encodings into ascii if special characters appear
+			if(header_dtype == 'string'):
+				def fix_encoding(x):
+					return x.encode("ascii", "ignore").decode("ascii")
+				udfencode = udf(fix_encoding, StringType())
+				cleaned_dataset = cleaned_dataset.withColumn(attr, udfencode(attr))	
+				cleaned_dataset = cleaned_dataset.exceptAll(cleaned_dataset.filter(cleaned_dataset[attr].rlike('\\*|^$|%'))) # remove garbage values from conversion
+			"""
+
+			# Count number of distinct values
+			num_distinct_col_values = cleaned_dataset.agg(countDistinct(col(attr)).alias("count_distinct")).collect()[0]["count_distinct"]
+			print("num_distinct_col_values:", num_distinct_col_values)
 			
-			if(num_distinct_col_values == num_col_values): # found a perfectly unique column to serve as the primary key
-				dataset_dict["key_column_candidates"].append(attr)
-				found_single_key = True
-			elif(num_distinct_col_values >= num_col_values*0.9 and num_col_empty == 0):
-				dataset_dict["key_column_candidates"].append(attr)
+			# Finding potential primary keys
+			if(not found_single_key):
+				
+				if(num_distinct_col_values == num_col_values): # found a perfectly unique column to serve as the primary key
+					dataset_dict["key_column_candidates"].append(attr)
+					found_single_key = True
+				elif(num_distinct_col_values >= num_col_values*0.9 and num_col_empty == 0):
+					dataset_dict["key_column_candidates"].append(attr)
 
-		# Top 5 most frequent values
-		cleaned_count = cleaned_dataset.groupBy(attr).agg(count(col(attr)).alias("val_count"))
-		top_5_frequent = cleaned_count.orderBy(cleaned_count["val_count"].desc())
-		top_5_frequent = top_5_frequent.limit(5).collect()
-		top_5_frequent = [row[attr] for row in top_5_frequent]
-		print("top 5 frequent values:", top_5_frequent)		
+			# Top 5 most frequent values
+			cleaned_count = cleaned_dataset.groupBy(attr).agg(count(col(attr)).alias("val_count"))
+			top_5_frequent = cleaned_count.orderBy(cleaned_count["val_count"].desc())
+			top_5_frequent = top_5_frequent.limit(5).collect()
+			top_5_frequent = [row[attr] for row in top_5_frequent]
+			print("top 5 frequent values:", top_5_frequent)		
+			
+			dtypes = [header_dtype]
 
+		else:
+			number_distinct_values = 0
+			top_5_frequent = []
+			dtypes = []
 		# Find number of frequent values
 		# need to retrieve sets of size 2, 3, and 4
 		# itemSets = cleaned_dataset.na.drop() # need to remove Null values to avoid error
@@ -144,7 +159,6 @@ if __name__ == "__main__":
 		#====================== Data Typing =======================
 
 		# array of possible column datatypes
-		dtypes = [header_dtype]
 
 		column = {
 			"column_name": attr,
@@ -157,8 +171,11 @@ if __name__ == "__main__":
 
 		# Fixed misclassified datatypes
 		attr_ = attr + " " # verifying label is actually for a date (avoids cases when "yearly" or "years" etc.)
+		# if no data is present, skip column
+		if(num_col_notempty == 0):
+			dtypes = []
 
-		if(header_dtype == 'string'):
+		elif(header_dtype == 'string'):
 
 			# Check if string column contains numeric values casted as strings:
 			num_ints = cleaned_dataset.select(attr, col(attr).cast("int").isNotNull().alias("isINT")).filter(col("isINT") == True).count() # count number of INT entries
@@ -166,7 +183,7 @@ if __name__ == "__main__":
 				dtypes.append('int')
 
 		# classifying numeric columns representing dates as 'date'
-		if('year ' in attr_.lower() or 'day ' in attr_.lower() or 'month ' in attr_.lower() or 'period' in attr_.lower() or 'week ' in attr_.lower() or 'date' in attr_.lower() or 'started' in attr_.lower() or 'completed' in attr.lower() or 'stamp' in attr.lower()):
+		elif('year ' in attr_.lower() or 'day ' in attr_.lower() or 'month ' in attr_.lower() or 'period' in attr_.lower() or 'week ' in attr_.lower() or 'date' in attr_.lower() or 'started' in attr_.lower() or 'completed' in attr.lower() or 'stamp' in attr.lower()):
 			
 			if(cleaned_dataset.filter(col(attr).rlike("\\p{L}")).count() > 0): #  if any strings containing letters are found, include dtype
 				dtypes.append('date')
