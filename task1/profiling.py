@@ -43,14 +43,15 @@ if __name__ == "__main__":
 
 	dataset.printSchema()
 
-	attributes = dataset.columns
-
 	# Count all values for a column
 	try:
 		num_col_values = dataset.count()
 	except: # if error is thrown, assume it's due to improper header formatting
 		dataset = dataset.select([col(c).alias(c.replace(".", "").replace("`", "")) for c in ["`" + x + "`" for x in dataset.columns]]) # pyspark cannot handle '.' in headers
 		num_col_values = dataset.count()
+
+	attributes = dataset.columns
+
 
 	print("num_col_values:", num_col_values)
 
@@ -103,23 +104,13 @@ if __name__ == "__main__":
 			# only clean the dataset if it has missing stuff
 			if(num_col_empty != 0):
 
-			# ************ Remove junk from dataset ************
+				# ************ Remove junk from dataset ************
 
 				cleaned_dataset = dataset.filter(col(attr).isNotNull()) # drop the entire row if any cells are empty in it
 				cleaned_dataset = cleaned_dataset.exceptAll(cleaned_dataset.filter(cleaned_dataset[attr].rlike('\\*|^$|^\\.$|No Data|NA|N/A|None|null|^s$|^___'))) # remove entries with 'No Data', 'NA', 'None' etc.
 						
 			else:
 				cleaned_dataset = dataset
-
-			"""
-			# convert string encodings into ascii if special characters appear
-			if(header_dtype == 'string'):
-				def fix_encoding(x):
-					return x.encode("ascii", "ignore").decode("ascii")
-				udfencode = udf(fix_encoding, StringType())
-				cleaned_dataset = cleaned_dataset.withColumn(attr, udfencode(attr))	
-				cleaned_dataset = cleaned_dataset.exceptAll(cleaned_dataset.filter(cleaned_dataset[attr].rlike('\\*|^$|%'))) # remove garbage values from conversion
-			"""
 
 			# Count number of distinct values
 			num_distinct_col_values = cleaned_dataset.agg(countDistinct(col(attr)).alias("count_distinct")).collect()[0]["count_distinct"]
@@ -139,8 +130,26 @@ if __name__ == "__main__":
 			top_5_frequent = cleaned_count.orderBy(cleaned_count["val_count"].desc())
 			top_5_frequent = top_5_frequent.limit(5).collect()
 			top_5_frequent = [row[attr] for row in top_5_frequent]
-			print("top 5 frequent values:", top_5_frequent)		
 			
+			try:
+				print("top 5 frequent values:", top_5_frequent)		
+			
+			except: # assume error is from ascii conversion -> convert string encodings into ascii if special characters appear
+
+				if(header_dtype == 'string'):
+					def fix_encoding(x):
+						return x.encode("ascii", "ignore").decode("ascii")
+					udfencode = udf(fix_encoding, StringType())
+					cleaned_dataset = cleaned_dataset.withColumn(attr, udfencode(attr))	
+					# cleaned_dataset = cleaned_dataset.exceptAll(cleaned_dataset.filter(cleaned_dataset[attr].rlike('\\*|^$|%'))) # remove garbage values from conversion
+				
+				# Top 5 most frequent values
+				cleaned_count = cleaned_dataset.groupBy(attr).agg(count(col(attr)).alias("val_count"))
+				top_5_frequent = cleaned_count.orderBy(cleaned_count["val_count"].desc())
+				top_5_frequent = top_5_frequent.limit(5).collect()
+				top_5_frequent = [row[attr] for row in top_5_frequent]
+				print("top 5 frequent values:", top_5_frequent)		
+
 			dtypes = [header_dtype]
 
 		else:
