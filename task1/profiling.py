@@ -205,7 +205,7 @@ if __name__ == "__main__":
 				cleaned_dataset_ints = cleaned_dataset.select(attr, col(attr).cast("int").isNotNull().alias("isINT")).filter(col("isINT") == True) # remove possible non INT entries
 				int_count = cleaned_dataset_ints.count()
 				
-				cleaned_dataset_ints = cleaned_dataset_ints.withColumn(attr, col(attr).cast("int"))
+				cleaned_dataset_ints = cleaned_dataset_ints.withColumn(attr, col(attr).cast("float"))
 				stats = cleaned_dataset_ints.agg(max(col(attr)).alias("max"), min(col(attr)).alias("min"), mean(col(attr)).alias("mean"), stddev(col(attr)).alias("stddev"))
 				col_max = stats.collect()[0]["max"]
 				col_min = stats.collect()[0]["min"]
