@@ -153,7 +153,7 @@ if __name__ == "__main__":
 			dtypes = [header_dtype]
 
 		else:
-			number_distinct_values = 0
+			num_distinct_col_values = 0
 			top_5_frequent = []
 			dtypes = []
 
