@@ -52,7 +52,6 @@ if __name__ == "__main__":
 
 	attributes = dataset.columns
 
-
 	print("num_col_values:", num_col_values)
 
 	# Header data type dictionary
@@ -80,7 +79,7 @@ if __name__ == "__main__":
 		val_count = dataset.groupBy(attr).agg(count(col(attr)).alias("val_count"))
 		
 		# Count all empty values for a column
-		num_col_labeled_empty = val_count.filter(col(attr).rlike('\\*|^$|^\\.$|No Data|NA|N/A|None|null|^s$|^___')).collect()
+		num_col_labeled_empty = val_count.filter(col(attr).rlike('\\*|^$|^\\.$|^/$|No Data|NA|N/A|None|null|^s$|^___')).collect()
 		if(len(num_col_labeled_empty) > 0):
 			num_col_labeled_empty = num_col_labeled_empty[0]["val_count"]
 		else:
@@ -107,7 +106,7 @@ if __name__ == "__main__":
 				# ************ Remove junk from dataset ************
 
 				cleaned_dataset = dataset.filter(col(attr).isNotNull()) # drop the entire row if any cells are empty in it
-				cleaned_dataset = cleaned_dataset.exceptAll(cleaned_dataset.filter(cleaned_dataset[attr].rlike('\\*|^$|^\\.$|No Data|NA|N/A|None|null|^s$|^___'))) # remove entries with 'No Data', 'NA', 'None' etc.
+				cleaned_dataset = cleaned_dataset.exceptAll(cleaned_dataset.filter(cleaned_dataset[attr].rlike('\\*|^$|^\\.$|^/$|No Data|NA|N/A|None|null|^s$|^___'))) # remove entries with 'No Data', 'NA', 'None' etc.
 						
 			else:
 				cleaned_dataset = dataset
@@ -198,10 +197,10 @@ if __name__ == "__main__":
 		# classifying numeric columns representing dates as 'date'
 		if('year ' in attr_.lower() or 'day ' in attr_.lower() or 'month ' in attr_.lower() or 'period' in attr_.lower() or 'week ' in attr_.lower() or 'date' in attr_.lower() or 'started' in attr_.lower() or 'completed' in attr.lower() or 'stamp' in attr.lower()):
 			
-			if(cleaned_dataset.filter(col(attr).rlike("\\p{L}")).count() > 0): #  if any strings containing letters are found, include dtype
-				dtypes.append('date')
-			else:
-				dtypes = ['date']
+			# if(cleaned_dataset.filter(col(attr).rlike("\\p{L}")).count() > 0): #  if any strings containing letters are found, include dtype (causes misclassification when only letters are AM/PM for time)
+			# 	dtypes.append('date')
+			# else:
+			dtypes = ['date']
 
 
 		print(dtypes)
@@ -214,7 +213,13 @@ if __name__ == "__main__":
 				cleaned_dataset_ints = cleaned_dataset.select(attr, col(attr).cast("int").isNotNull().alias("isINT")).filter(col("isINT") == True) # remove possible non INT entries
 				int_count = cleaned_dataset_ints.count()
 				
-				cleaned_dataset_ints = cleaned_dataset_ints.withColumn(attr, col(attr).cast("float"))
+				num_type = "INTEGER (LONG)"
+				if(cleaned_dataset_ints.first()[attr].is_integer()):
+					cleaned_dataset_ints = cleaned_dataset_ints.withColumn(attr, col(attr).cast("int"))
+				else:
+					cleaned_dataset_ints = cleaned_dataset_ints.withColumn(attr, col(attr).cast("float"))
+					num_type = "REAL"
+
 				stats = cleaned_dataset_ints.agg(max(col(attr)).alias("max"), min(col(attr)).alias("min"), mean(col(attr)).alias("mean"), stddev(col(attr)).alias("stddev"))
 				col_max = stats.collect()[0]["max"]
 				col_min = stats.collect()[0]["min"]
@@ -223,7 +228,7 @@ if __name__ == "__main__":
 
 				# Add column to JSON
 				column["data_types"].append({
-						"type": "INTEGER (LONG)",
+						"type": num_type,
 						"count": int_count,
 						"max_value": col_max,
 						"min_value": col_min,
