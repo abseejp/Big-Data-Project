@@ -214,11 +214,13 @@ if __name__ == "__main__":
 				int_count = cleaned_dataset_ints.count()
 				
 				num_type = "INTEGER (LONG)"
-				if(cleaned_dataset_ints.first()[attr].is_integer()):
+				try:
+					if(not cleaned_dataset_ints.first()[attr].is_integer()):
+						cleaned_dataset_ints = cleaned_dataset_ints.withColumn(attr, col(attr).cast("float"))
+						num_type = "REAL"
+				except:
 					cleaned_dataset_ints = cleaned_dataset_ints.withColumn(attr, col(attr).cast("int"))
-				else:
-					cleaned_dataset_ints = cleaned_dataset_ints.withColumn(attr, col(attr).cast("float"))
-					num_type = "REAL"
+
 
 				stats = cleaned_dataset_ints.agg(max(col(attr)).alias("max"), min(col(attr)).alias("min"), mean(col(attr)).alias("mean"), stddev(col(attr)).alias("stddev"))
 				col_max = stats.collect()[0]["max"]
