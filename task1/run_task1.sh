@@ -28,7 +28,7 @@ do
 	# then
 
 	########## 2 ##########
-	spark-submit --conf spark.pyspark.python=$PYSPARK_PYTHON profiling.py "$line"
+	spark-submit --conf spark.executor.memoryOverhead=3G --executor-memory 6G spark.pyspark.python=$PYSPARK_PYTHON profiling.py "$line"
     #######################
 
     # fi
