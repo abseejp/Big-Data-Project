@@ -11,6 +11,8 @@
 
 module load python/gnu/3.6.5
 module load spark/2.4.0
+export PYSPARK_PYTHON='/share/apps/python/3.6.5/bin/python'
+export PYSPARK_DRIVER_PYTHON='/share/apps/python/3.6.5/bin/python'
 
 ########## 1 ##########
 # /usr/bin/hadoop fs -get "/user/hm74/NYCOpenData" "/scratch/mva271"
@@ -24,14 +26,11 @@ do
 	# /usr/bin/hadoop fs -put "$file_path"
 	#######################
 
-	# echo "$line"
-	# read -p 'skip this file (y/n)?: ' skipvar
-	# if [ "$skipvar" = "n" ]
-	# then
-
 	########## 2 ##########
 	spark-submit --conf spark.pyspark.python=$PYSPARK_PYTHON profiling.py "$line"
     #######################
 
-    # fi
 done < "$input"
+
+# Merge all of the json files together into a single "task1.json"
+python merge_jsons.py
