@@ -4,24 +4,25 @@ import os
 import json
 
 def cat_json(output_filename, input_filenames):
-    with file(output_filename, "w") as outfile:
+    with open(output_filename, "w") as outfile:
         first = True
         for infile_name in input_filenames:
-            with file(infile_name) as infile:
+            with open(infile_name) as infile:
                 if first:
-                    outfile.write('[')
+                    outfile.write('{ "datasets": ')
                     first = False
                 else:
                     outfile.write(',')
-                outfile.write(mangle(infile.read()))
-        outfile.write(']')
+                outfile.write(infile.read())
+        outfile.write('}')
 
 if __name__ == "__main__":
     
     output = "task1.json"
     files = []
+    directory = "/home/mva271"
 
-    for file in os.listdir("/scratch/mva271/NYCOpenData/datasets.txt"):
-        files.append(str(file))
+    for file in os.listdir(directory):
+        files.append(directory+str(file))
 
-    cat_json(output, files)
+    cat_json(directory+output, files)
