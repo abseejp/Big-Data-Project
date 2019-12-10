@@ -5,11 +5,12 @@
 
 # To Use:
 # Comment out the line labeled "2" and uncomment the two lines labeled "1". Running these will get all of the files and put them on the Hadoop server
-# Comment out the two lines labeled "1" and uncomment the line labeled "2". Running this will loop through a list of files and run them with spark.
+# Comment out the lines labeled "1" and uncomment the line labeled "2". Running this will loop through a list of files and run them with spark.
 
 # Note: once the datasets are put on hadoop server, they can be physically deleted from scratch
 
-
+module load python/gnu/3.6.5
+module load spark/2.4.0
 
 ########## 1 ##########
 # /usr/bin/hadoop fs -get "/user/hm74/NYCOpenData" "/scratch/mva271"
@@ -19,7 +20,8 @@ input="/scratch/mva271/NYCOpenData/files.txt"
 while IFS= read -r line
 do
 	########## 1 ##########
-	# /usr/bin/hadoop fs -put "$line"
+	# file_path = "/scratch/mva271/NYCOpenData/" + "$line"
+	# /usr/bin/hadoop fs -put "$file_path"
 	#######################
 
 	# echo "$line"
@@ -28,7 +30,7 @@ do
 	# then
 
 	########## 2 ##########
-	spark-submit --conf spark.executor.memoryOverhead=3G --executor-memory 6G spark.pyspark.python=$PYSPARK_PYTHON profiling.py "$line"
+	spark-submit --conf spark.pyspark.python=$PYSPARK_PYTHON profiling.py "$line"
     #######################
 
     # fi
