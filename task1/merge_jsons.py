@@ -12,12 +12,12 @@ def cat_json(output_filename, input_filenames):
         for infile_name in input_filenames:
             with open(infile_name) as infile:
                 if first:
-                    outfile.write('{ "datasets": ')
+                    outfile.write('{ "datasets": [')
                     first = False
                 else:
                     outfile.write(',')
                 outfile.write(infile.read())
-        outfile.write('}')
+        outfile.write('] }')
 
 if __name__ == "__main__":
     
