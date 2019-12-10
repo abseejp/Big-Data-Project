@@ -32,7 +32,7 @@ if __name__ == "__main__":
 	print ("Executing data profiling with input from " + inFile)
 
 #================== read file =====================#
-	text_file = sc.textFile('feu5-w2e2.BusinessZip.txt')
+	text_file = sc.textFile(inFile)
 
 	#spliting against '\t' return list of list[row]
 	list_row  = text_file.map(lambda x: [x.split("\t")[0]])
