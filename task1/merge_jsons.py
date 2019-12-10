@@ -1,3 +1,6 @@
+#!/usr/bin/env python
+# coding: utf-8
+
 # The purpose of this script is to read in a list of dataset json files and merge them into a single task1.json
 
 import os
@@ -23,6 +26,7 @@ if __name__ == "__main__":
     directory = "/home/mva271"
 
     for file in os.listdir(directory):
-        files.append(directory+str(file))
+        if(file != 'profiling.py' or file != 'run_task1.sh' or file != 'merge_jsons.py'):
+            files.append(directory+str(file))
 
     cat_json(directory+output, files)
