@@ -44,11 +44,11 @@ if __name__ == "__main__":
 	dataset.printSchema()
 
 	# Count all values for a column
-	try:
-		num_col_values = dataset.count()
-	except: # if error is thrown, assume it's due to improper header formatting
-		dataset = dataset.select([col(c).alias(c.replace(".", "").replace("`", "")) for c in ["`" + x + "`" for x in dataset.columns]]) # pyspark cannot handle '.' in headers
-		num_col_values = dataset.count()
+	# try:
+	num_col_values = dataset.count()
+	# except: # if error is thrown, assume it's due to improper header formatting
+	# 	dataset = dataset.select([col(c).alias(c.replace(".", "").replace("`", "")) for c in ["`" + x + "`" for x in dataset.columns]]) # pyspark cannot handle '.' in headers
+	# 	num_col_values = dataset.count()
 
 	attributes = dataset.columns
 
@@ -197,7 +197,10 @@ if __name__ == "__main__":
 		# classifying numeric columns representing dates as 'date'
 		if('year ' in attr_.lower() or 'day ' in attr_.lower() or 'month ' in attr_.lower() or 'period' in attr_.lower() or 'week ' in attr_.lower() or 'date' in attr_.lower() or 'started' in attr_.lower() or 'completed' in attr.lower() or 'stamp' in attr.lower()):
 			
-			# if(cleaned_dataset.filter(col(attr).rlike("\\p{L}")).count() > 0): #  if any strings containing letters are found, include dtype (causes misclassification when only letters are AM/PM for time)
+			#  if any strings containing letters are found, include dtype 
+			# (causes too many misclassifications when only letters are AM/PM for time)
+			
+			# if(cleaned_dataset.filter(col(attr).rlike("\\p{L}")).count() > 0):
 			# 	dtypes.append('date')
 			# else:
 			dtypes = ['date']
