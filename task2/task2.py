@@ -15,36 +15,33 @@ from pyspark.sql.functions import *
 
 if __name__ == "__main__":
 
-	sc = SparkContext()
+	    sc = SparkContext()
 
-	spark = SparkSession \
-		.builder \
-		.appName("profiling") \
-		.config("spark.some.config.option", "some-value") \
-		.getOrCreate()
-	
-	sqlContext = SQLContext(sparkContext = spark.sparkContext, sparkSession = spark)
+	    spark = SparkSession \
+		       .builder \
+		       .appName("profiling") \
+		       .config("spark.some.config.option", "some-value") \
+		       .getOrCreate()
 
-	# get command-line arguments
-	inFile = sys.argv[1]
+	    sqlContext = SQLContext(sparkContext = spark.sparkContext, sparkSession = spark)
+
+	    # get command-line arguments
+	    inFile = sys.argv[1]
 
 
-	print ("Executing data profiling with input from " + inFile)
+	    print ("Executing data profiling with input from " + inFile)
 
 #================== read file =====================#
-	text_file = sc.textFile(inFile)
-
-	#spliting against '\t' return list of list[row]
-	list_row  = text_file.map(lambda x: [x.split("\t")[0]])
-
-	perct = []
-
+	    text_file = sc.textFile(inFile)
+        #spliting against '\t' return list of list[row]
+        list_row  = text_file.map(lambda x: [x.split("\t")[0]])
+        perct = {}
         df = list_row.toDF() #convert to dataframe
         df_count = df.count() #count rows in dataframe
         col_name = df.columns[0] # retrive column name
-        
-#================== sementic types =====================#
-	    # city
+
+#================== semantic types =====================#
+    	# city
         df_city = df.where( col(col_name).like("%ROO%") | col(col_name).like("%BEACH%") | col(col_name).like("%CITY%") | col(col_name).like("%DALE%") | \
                             col(col_name).like("%EAST%") | col(col_name).like("%HIL%") | col(col_name).like("%LAND%") | col(col_name).like("%LAKE%") | \
                             col(col_name).like("%NOR%") | col(col_name).like("%TON%") | col(col_name).like("%PARK%") | col(col_name).like("%PORT%") | \
@@ -53,12 +50,12 @@ if __name__ == "__main__":
                             col(col_name).like("%YORK%") | col(col_name).like("%MAN%") | col(col_name).like("%LONG%") | col(col_name).like("%POINT%") | \
                             col(col_name).like("%JAMAICA%") | col(col_name).like("%OZONE%") | col(col_name).like("%JACKSON%") | col(col_name).like("%GARDEN%") | \
                             col(col_name).like("% NY %") | col(col_name).like("% NY%"))
-                             
-        
+
+
         city_count = df_city.count()
         city_perct = (city_count/df_count)*100
-        
-        
+
+
         # street_name
         df_street = df.where( col(col_name).like("%STREET%") | col(col_name).like("%AVE%") | col(col_name).like("%PLACE%") | col(col_name).like("%ROAD%") | \
                               col(col_name).like("%COURT%") | col(col_name).like("%DRIV%") | col(col_name).like("%PARK%") | col(col_name).like("%LANE%") | \
@@ -67,7 +64,7 @@ if __name__ == "__main__":
 
         street_count = df_street.count()
         street_perct = (street_count /df_count)*100
-        
+
 
         # website
         df_website = df.where( col(col_name).like("%ORG%") | col(col_name).like("%PORTAL%") | col(col_name).like("%GOV%") | col(col_name).like("%COM%") | \
@@ -131,10 +128,10 @@ if __name__ == "__main__":
         business_perct = (business_count/df_count) * 100
 
         # phone_number
-        df_phone_number = df.where(df.where(col(col_name).rlike("^[0-9]{3}-[0-9]{3}-[0-9]{4}$")))
+        df_phone_number = df.where(col(col_name).rlike("^[0-9]{3}-[0-9]{3}-[0-9]{4}$"))
 
         phone_number_count = df_phone_number.count()
-        phone_number_prect = (phone_number_count/df_count)*100
+        phone_number_perct = (phone_number_count/df_count)*100
 
 
         #address
@@ -327,9 +324,14 @@ if __name__ == "__main__":
             if value == max_percent:
                 matched_label = label
 
-        total_perct = city_agency_perct+car_make_perct+business_perct+building_perct+ borough_perct+person_perct+address_perct+city_perct + \
-                 color_perct + cord_perct + neighbor_perct + school_level_perct + school_perct + school_subject_perct + street_perct + \
-                 vehicle_type_perct + website_perct + zip_perct
 
-        threshold = total_perct/perct.count()
 # ================== Saving as JSON file =====================
+
+        {
+            "column_name" : inFile,
+            "semantic_types": [
+                {
+                        "semantic_type": matched_label,
+                }
+            ]
+        }
