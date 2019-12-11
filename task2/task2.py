@@ -63,7 +63,7 @@ if __name__ == "__main__":
         df_street = df.where( col(col_name).like("%STREET%") | col(col_name).like("%AVE%") | col(col_name).like("%PLACE%") | col(col_name).like("%ROAD%") | \
                               col(col_name).like("%COURT%") | col(col_name).like("%DRIV%") | col(col_name).like("%PARK%") | col(col_name).like("%LANE%") | \
                               col(col_name).like("%TERRACE%") | col(col_name).like("%WEST%") | col(col_name).like("%SOUTH%") | col(col_name).like("%EAST%") | \
-                              col(col_name).like("%NORTH%")).withColumn('lable', lit('street_name'))
+                              col(col_name).like("%NORTH%"))
 
         street_count = df_street.count()
         street_perct = (street_count /df_count)*100
@@ -71,25 +71,28 @@ if __name__ == "__main__":
 
         # website
         df_website = df.where( col(col_name).like("%ORG%") | col(col_name).like("%PORTAL%") | col(col_name).like("%GOV%") | col(col_name).like("%COM%") | \
-                               col(col_name).like("%WWW%") | col(col_name).like("%NET%")).withColumn('lable', lit('web_site'))
+                               col(col_name).like("%WWW%") | col(col_name).like("%NET%"))
 
         website_count = df_website.count()
         website_perct = (website_count/df_count)*100
 
+
         #building_classification
-        df_building = df.where( col(col_name).like("%WALK%") | col(col_name).like("%ELEVATOR%") | col(col_name).like("%CONDOPS%")).withColumn('lable', lit('building_classification'))
+        df_building = df.where( col(col_name).like("%WALK%") | col(col_name).like("%ELEVATOR%") | col(col_name).like("%CONDOPS%"))
 
         building_count = df_building.count()
         building_perct = (building_count/df_count)*100
+
 
         #borough
         df_borough = df.where( col(col_name).like("M") | col(col_name).like("K") | col(col_name).like("Q") | col(col_name).like("R") | \
                                col(col_name).like("X") | col(col_name).like("%MANHAT%") | col(col_name).like("%QUEEN%") | col(col_name).like("%BROO%") | \
                                col(col_name).like("%QUEEN%") | col(col_name).like("%BRONX%") | col(col_name).like("%RICH%") | \
-                               col(col_name).like("%STATEN%")).withColumn('lable', lit('borough'))
+                               col(col_name).like("%STATEN%"))
 
         borough_count = df_borough.count()
         borough_perct = (borough_count / df_count) * 100
+
 
         #person_name
         df_person = df.where( col(col_name).like("%H_M%") | col(col_name).like("%R_N%") | col(col_name).like("%A_B%") | col(col_name).like("A_D%") | \
@@ -122,10 +125,16 @@ if __name__ == "__main__":
                                 col(col_name).like("%CHINA%") | col(col_name).like("%COFFEE%") | col(col_name).like("%BURGER%") | col(col_name).like("%MARKET%") | \
                                 col(col_name).like("%GOURMET%") | col(col_name).like("%MEXICAN%") | col(col_name).like("%INDIAN%") | col(col_name).like("%BAGEL%") |\
                                 col(col_name).like("%KING%") | col(col_name).like("%EXPRESS%") | col(col_name).like("%GARDEN%") | \
-                                col(col_name).like("%NEW%")).withColumn('lable', lit('business_name'))
+                                col(col_name).like("%NEW%"))
 
         business_count = df_business.count()
         business_perct = (business_count/df_count) * 100
+
+        # phone_number
+        df_phone_number = df.where(df.where(col(col_name).rlike("^[0-9]{3}-[0-9]{3}-[0-9]{4}$")))
+
+        phone_number_count = df_phone_number.count()
+        phone_number_prect = (phone_number_count/df_count)*100
 
 
         #address
@@ -138,7 +147,7 @@ if __name__ == "__main__":
                                col(col_name).like("%NEW%") | col(col_name).like("%CHURCH%") | col(col_name).like("%ROCK%") | col(col_name).like("%FULTON%") | \
                                col(col_name).like("%METROP%") | col(col_name).like("%TREMONT%") | col(col_name).like("%WOOD%") | col(col_name).like("%FLATBUSH%") | \
                                col(col_name).like("%WHITE%") | col(col_name).like("%PLAINS%") | col(col_name).like("%LIBERTY%") | col(col_name).like("%BLVD%") | \
-                               col(col_name).like("%MAN%") | col(col_name).like("%OCEAN%") | col(col_name).like("%AMSTERDAM%")).withColumn("lable",lit("address")) 
+                               col(col_name).like("%MAN%") | col(col_name).like("%OCEAN%") | col(col_name).like("%AMSTERDAM%"))
 
         address_count = df_address.count()
         address_perct = (address_count/df_count) * 100
@@ -152,17 +161,20 @@ if __name__ == "__main__":
         neighbor_count = df_neighborhood.count()
         neighbor_perct = (neighbor_count/df_count) * 100
 
+
         #lat_lon_cord
         df_cord = df.where( col(col_name).like("(__.%") | col(col_name).like("__.%"))
 
         cord_count = df_cord.count()
         cord_perct = (cord_count/df_count) * 100
 
+
         #zip_code
-        df_zip = df.where( df.filter( col(col_name).rlike("[0-9]")))
+        df_zip = df.where( col(col_name).rlike("^[0-9]{2}$"))
 
         zip_count = df_zip.count()
         zip_perct = (zip_count/df_count) * 100
+
 
         #school_name
         df_school = df.where( col(col_name).like("%PUBLIC%") | col(col_name).like("%SCHOOL%") | col(col_name).like("%CHILDREN%") | col(col_name).like("%ACADEMY%") | \
@@ -171,7 +183,6 @@ if __name__ == "__main__":
 
         school_count = df_school.count()
         school_perct = (school_count / df_count) * 100
-
 
 
         #color
@@ -185,8 +196,10 @@ if __name__ == "__main__":
                              col(col_name).like("%YL%") | col(col_name).like("%YEL%") |col(col_name).like("%TN%") |col(col_name).like("%ROWN%") | \
                              col(col_name).like("%SLV%") |col(col_name).like("%RED%") |col(col_name).like("%SIL%") |col(col_name).like("%GRN%") | \
                              col(col_name).like("LT%"))
+
         color_count = df_color.count()
         color_perct = (color_count / df_count)*100
+
 
         #car_make
         df_car = df.where( col(col_name).like("VOL%") | col(col_name).like("%AC_%") | col(col_name).like("%AE_%") | col(col_name).like("%AD_%") | \
@@ -209,6 +222,7 @@ if __name__ == "__main__":
         car_make_count = df_car.count()
         car_make_perct = (car_make_count/df_count)*100
 
+
         #city_agency
         df_agency = df.where( col(col_name).like("311") | col(col_name).like("ACS") | col(col_name).like("BIC") | col(col_name).like("BOE") | col(col_name).like("BPL") | \
                               col(col_name).like("CC__") | col(col_name).like("DHS") | col(col_name).like("CUNY") | col(col_name).like("DCA%") | col(col_name).like("NYP%") | \
@@ -221,20 +235,34 @@ if __name__ == "__main__":
         city_agency_count = df_agency.count()
         city_agency_perct = (city_agency_count/df_count)*100
 
+
+        # area_of_study
+        df_study = df.where( col(col_name).like("%SCIENCE%") | col(col_name).like("%DESIGN%") | col(col_name).like("%ARTS%") | col( col_name).like("%PERFORMING%") | \
+                             col(col_name).like("%TEACH%") | col(col_name).like("%COMMUNI%") | col(col_name).like("%ARCHITECT%") | col(col_name).like("%TECHNO%") | \
+                             col(col_name).like("%HOSPITALITY%") | col(col_name).like("%HUMANIT%") | col(col_name).like("%MATH%") | col(col_name).like("%HEALTH%") | \
+                             col(col_name).like("%ENVIRON%") | col(col_name).like("%INTEREST%") | col(col_name).like("%GOVERNMENT%") | col(col_name).like("%COMPUTER%") | \
+                             col(col_name).like("%BUSINESS%") | col(col_name).like("%CULINARY%") | col(col_name).like("%LAW%"))
+
+        area_of_study_count = df_study.count()
+        area_of_study_perct = (area_of_study_count/df_count)*100
+
+
         #subject_in_school
         df_subject = df.where( col(col_name).like("%ALGEBRA%") | col(col_name).like("%CHEM%") | col(col_name).like("%BIO%") | col(col_name).like("%MATH%") | \
-                              col(col_name).like("%ECO%") | col(col_name).like("%ENG%") | col(col_name).like("%GEO%") | col(col_name).like("%GLO%") | \
-                              col(col_name).like("%ENV%") | col(col_name).like("%PHY%") | col(col_name).like("%GOV%") | col(col_name).like("%HIST%"))
+                               col(col_name).like("%ECO%") | col(col_name).like("%ENG%") | col(col_name).like("%GEO%") | col(col_name).like("%GLO%") | \
+                               col(col_name).like("%ENV%") | col(col_name).like("%PHY%") | col(col_name).like("%GOV%") | col(col_name).like("%HIST%"))
 
         school_subject_count = df_subject.count()
         school_subject_perct = (school_subject_count/df_count)*100
 
+
         #school_level
         df_school_level = df.where( col(col_name).like("%SCHOOL%") | col(col_name).like("%ELEMENTARY%") | col(col_name).like("%HIGH%") | col(col_name).like("KINDER%") | \
-                              col(col_name).like("%TRANSFER%"))
+                                    col(col_name).like("%TRANSFER%"))
 
         school_level_count = df_school_level.count()
         school_level_perct = (school_level_count/df_count)*100
+
 
         #vehicle_type
         df_vehicle_type = df.where( col(col_name).like("4__") | col(col_name).like("2_") | col(col_name).like("2__") | col(col_name).like("2___") | \
@@ -254,6 +282,18 @@ if __name__ == "__main__":
 
         vehicle_type_count = df_vehicle_type.count()
         vehicle_type_perct = (vehicle_type_count/df_count)*100
+
+
+        # park_playground
+        df_playground = df.where( col(col_name).like("%SCHOOL%") | col(col_name).like("%PARK%") | col(col_name).like("%PLAYGROUND%") | col(col_name).like("%HIGH%") | \
+                                  col(col_name).like("%CENTER%") | col(col_name).like("%POOL%") | col(col_name).like("%RECREATION%") | col(col_name).like("%CENTRAL%") | \
+                                  col(col_name).like("%BEACH%") | col(col_name).like("%FIELD%") | col(col_name).like("%PROSPECT%") | col(col_name).like("%ACADEMY%") | \
+                                  col(col_name).like("%COMMUNITY%"))
+
+        park_type_count = df_playground.count()
+        park_type_perct = (park_type_count/df_count)*100
+
+
         #other
 
         perct = {
@@ -292,4 +332,4 @@ if __name__ == "__main__":
                  vehicle_type_perct + website_perct + zip_perct
 
         threshold = total_perct/perct.count()
-#--------------------------------------------------------------------------------------------------------------------------        
+# ================== Saving as JSON file =====================
