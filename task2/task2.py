@@ -411,11 +411,10 @@ if __name__ == "__main__":
     # ================== Saving as JSON file =====================
 
     semantic_dict = {
-        {
             "column_name": column_name,
-            "semantic_types": semantic_instances,
+            "semantic_types": semantic_instances
         }
-    }
+
 
     json_filename = column_name + ".json"
     with open(json_filename, "w") as f:
