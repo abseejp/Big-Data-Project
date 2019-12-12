@@ -3,12 +3,9 @@ import pyspark
 import string
 import os
 import json
-
 from pyspark import SparkContext
 from pyspark.sql import SparkSession
 from pyspark.sql import SQLContext
-
-from pyspark.sql.types import StructType, StructField, IntegerType, StringType, FloatType
 from pyspark.sql.window import Window
 from pyspark.sql.functions import col
 from pyspark.sql.functions import *
@@ -44,6 +41,7 @@ if __name__ == "__main__":
     col_name = df.columns[0]  # retrive column name
 
     # ================== semantic types =====================#
+
     # city
     df_city = df.where(
         col(col_name).like("%ROO%") | col(col_name).like("%BEACH%") | col(col_name).like("%CITY%") | col(col_name).like("%DALE%") | \
@@ -307,13 +305,7 @@ if __name__ == "__main__":
     park_type_count = df_playground.count()
     park_type_perct = (park_type_count / df_count) * 100
 
-    # other
-
-    #   label_coverage = [address_perct, area_of_study_perct, business_perct, borough_perct, building_perct, city_agency_perct, \
-    #                     car_make_perct, color_perct, cord_perct, city_perct, neighbor_perct, person_perct, park_type_perct, \
-    #                     phone_number_perct, street_perct, school_subject_perct, school_perct, school_level_perct,  website_perct, \
-    #                     vehicle_type_perct, zip_perct,]
-
+    # ================== assigning semantic types =====================#
     label_list_perct = {
         "city_agency": [city_agency_perct, city_agency_count],
         "car_make": [car_make_perct, car_make_count],
@@ -335,20 +327,6 @@ if __name__ == "__main__":
         "zip_code": [zip_perct,zip_count],
         "area_of_study": [area_of_study_perct,area_of_study_count],
     }
-
-    #max_percent = sorted(perct.values(), reverse=True)[0]
-
-    #matched_label = ""
-
-    #for label, value in perct.items():
-    #   if value == max_percent:
-    #        matched_label = label
-
-
-    # ================== Assigning Labels =====================
-    #[person_name, business_name, phone_number, address, street_name, city, neighborhood, lat_lon_cord, zip_code,
-     #borough, school_name, color, car_make, city_agency, area_of_study, subject_in_school, school_level, college_name,
-     #website, building_classification, vehicle_type, location_type, park_playground, other]
 
     label_list = {
         "person_name": "first_name, middle_name,last_name",
@@ -381,15 +359,13 @@ if __name__ == "__main__":
     matched_label = []
     label_count = ''
 
-
-
     for label in label_list_perct.keys():
-        if (label_list_perct[label][0] > 40):
+        if (label_list_perct[label][0] >= 40):
             matched_label.append(label)
             label_count = label_count + label_list_perct[label][1] + ' '
 
 
-    if ((matched_label)<0):
+    if ((matched_label)<40):
         matched_label.append('other')
 
 
