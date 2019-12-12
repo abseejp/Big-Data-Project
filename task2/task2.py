@@ -6,6 +6,8 @@ import json
 from pyspark import SparkContext
 from pyspark.sql import SparkSession
 from pyspark.sql import SQLContext
+from functools import reduce
+from pyspark.sql import DataFrame
 from pyspark.sql.window import Window
 from pyspark.sql.functions import col
 from pyspark.sql.functions import *
@@ -29,7 +31,7 @@ if __name__ == "__main__":
     print("Executing data profiling with input from " + inFile)
 
     text_file = sc.textFile(inFile)
-    column_name = inFile[:-4]
+    column_name = inFile.split('.')[1]
 
     # sliting column over tag
     list_row = text_file.map(lambda x: [x.split("\t")[0]])
@@ -305,8 +307,10 @@ if __name__ == "__main__":
     park_type_count = df_playground.count()
     park_type_perct = (park_type_count / df_count) * 100
 
+
+
     # ================== assigning semantic types =====================#
-    label_list_perct = {
+    label_list_data = {
         "city_agency": [city_agency_perct, city_agency_count],
         "car_make": [car_make_perct, car_make_count],
         "business_name": [business_perct, business_count],
@@ -326,13 +330,14 @@ if __name__ == "__main__":
         "website": [website_perct, website_count],
         "zip_code": [zip_perct,zip_count],
         "area_of_study": [area_of_study_perct,area_of_study_count],
+        "park_playground":[park_type_perct,park_type_count],
     }
 
     label_list = {
         "person_name": "first_name, middle_name,last_name",
         "business_name": "business_name",
         "phone_number": "phone_number",
-        "address": "street_name, city, neighbourhood, address",
+        "address": "street_name, city, neighbourhood, address, zip_code",
         "street_name": "street_name",
         "city": "city",
         "neighbourhood": "neighbourhood",
@@ -350,39 +355,64 @@ if __name__ == "__main__":
         "website": "website",
         "building_classification": "building_classification",
         "vehicle_type": "vehicle_type",
-        "location_type": "location_type, zip_code, lat_lon_cord",
+        "location_type": "location_type, lat_lon_cord",
         "park_playground": "park_playground",
         "other": "age, country, country_code",
     }
 
 
     matched_label = []
-    label_count = ''
+    semantic_instances = []
 
-    for label in label_list_perct.keys():
-        if (label_list_perct[label][0] >= 40):
+    def create_output(label):
+        semantic_instances.append(
+                    {
+                        "semantic_type": label,
+                        "label": label_list.get(label),
+                        "count": label_list_data[label][1]
+                    }
+        )
+
+
+    for label in label_list_data.keys():
+        if (label_list_data[label][0] >= 10):
             matched_label.append(label)
-            label_count = label_count + label_list_perct[label][1] + ' '
-
+            create_output(label)
 
     if ((matched_label)<40):
         matched_label.append('other')
 
+    #other's count
+    def union_all(*dfs):
+        return reduce(DataFrame.unionAll,dfs)
 
+    df_matched_dataset = union_all(df_city,df_street,df_phone_number,df_study,df_playground,df_agency,df_vehicle_type, \
+                                   df_school_level,df_school,df_subject,df_cord, df_neighborhood,df_address,df_person,df_business, \
+                                   df_borough, df_building,df_car,df_color,df_website,df_zip)
+
+    df_indentified_data = df_matched_dataset.drop_duplicates(col_name)
+
+    other_count = df.count - df_indentified_data.count()
+
+    semantic_instances.append(
+        {
+            "semantic_type": "other",
+            "label": label_list.get("other"),
+            "count": other_count
+        }
+    )
 
     # ================== Saving as JSON file =====================
 
-    semantic_label = {
-        "column_name": column_name,
-        "semantic_types": [
-            {
-                "semantic_type": matched_label,
-                "label": label_list.get(matched_label),
-                "count": label_list_perct.get(matched_label)[1]
-            }
-        ]
+    semantic_dict = {
+        {
+            "column_name": column_name,
+            "semantic_types": semantic_instances,
+        }
     }
 
     json_filename = column_name + ".json"
     with open(json_filename, "w") as f:
-        json.dump(semantic_label, f)
+        json.dump(semantic_dict, f)
+
+
