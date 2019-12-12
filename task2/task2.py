@@ -394,13 +394,14 @@ if __name__ == "__main__":
     df_indentified_data = df_matched_dataset.drop_duplicates().count()
     other_count = df_count - df_indentified_data
 
-    semantic_instances.append(
-        {
-            "semantic_type": "other",
-            "label": label_list.get("other"),
-            "count": other_count
-        }
-    )
+    if (other_count > 0):
+        semantic_instances.append(
+            {
+                "semantic_type": "other",
+                "label": label_list.get("other"),
+                "count": other_count
+            }
+        )
 
     # ================== Saving as JSON file =====================
 
