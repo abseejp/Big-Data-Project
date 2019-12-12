@@ -24,7 +24,7 @@ if __name__ == "__main__":
 
     # get command-line arguments
 
-    inFile = sys.argv[1]
+    inFile = sys.argv[0]
 
     print("Executing data profiling with input from " + inFile)
 
