@@ -28,10 +28,11 @@ if __name__ == "__main__":
 
     # Read cluster.txt file
     file_object = open(cluster_file)
-    file_object.close()
 
     # Remove bracket '[]' from start/end and convert string to list of files
     file_list = file_object.read()[1:-1].split(',')
+
+    file_object.close()
 
     for file_name in file_list:
 
@@ -43,8 +44,7 @@ if __name__ == "__main__":
         column_name = inFile.split('.')[1]
 
         # sliting column over tag
-        list_row = text_file.map(lambda x: [x.split("\t")[0]])
-        perct = {}                                                                       t
+        list_row = text_file.map(lambda x: [x.split("\t")[0]])                                                                      t
 
         # converting to dataframe
         df = list_row.toDF()  # convert to dataframe
