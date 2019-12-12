@@ -391,9 +391,8 @@ if __name__ == "__main__":
                                    df_school_level,df_school,df_subject,df_cord, df_neighborhood,df_address,df_person,df_business, \
                                    df_borough, df_building,df_car,df_color,df_website,df_zip)
 
-    df_indentified_data = df_matched_dataset.drop_duplicates(col_name)
-
-    other_count = df.count - df_indentified_data.count()
+    df_indentified_data = df_matched_dataset.drop_duplicates().count()
+    other_count = df_count - df_indentified_data
 
     semantic_instances.append(
         {
