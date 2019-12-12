@@ -43,8 +43,7 @@ if __name__ == "__main__":
         column_name = inFile.split('.')[1]
 
         # sliting column over tag
-        list_row = text_file.map(lambda x: [x.split("\t")[0]])
-        perct = {}                                                                       t
+        list_row = text_file.map(lambda x: [x.split("\t")[0]])                                                                      t
 
         # converting to dataframe
         df = list_row.toDF()  # convert to dataframe
