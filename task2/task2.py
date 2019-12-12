@@ -357,7 +357,7 @@ if __name__ == "__main__":
         "vehicle_type": "vehicle_type",
         "location_type": "location_type, lat_lon_cord",
         "park_playground": "park_playground",
-        "other": "age, country, country_code",
+        "other": "other",
     }
 
     sum_perct = 0
