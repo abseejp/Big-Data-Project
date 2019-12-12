@@ -360,6 +360,12 @@ if __name__ == "__main__":
         "other": "age, country, country_code",
     }
 
+    sum_perct = 0
+    for label in label_list_data:
+        sum_perct = sum_perct + label_list_data.get(label)[0]
+
+    threshold = sum_perct/20
+
 
     matched_label = []
     semantic_instances = []
@@ -375,7 +381,7 @@ if __name__ == "__main__":
 
 
     for label in label_list_data.keys():
-        if (label_list_data[label][0] >= 10):
+        if (label_list_data[label][0] >= threshold):
             matched_label.append(label)
             create_output(label)
 
