@@ -14,8 +14,6 @@ from pyspark.sql.functions import *
 
 if __name__ == "__main__":
     sc = SparkContext()
-
-    sc = SparkContext()
     spark = SparkSession \
         .builder \
         .appName("profiling") \
@@ -362,9 +360,9 @@ if __name__ == "__main__":
 
     sum_perct = 0
     for label in label_list_data:
-        sum_perct = sum_perct + label_list_data.get(label)[0]
+        sum_perct = sum_perct + label_list_data.get(label)[1]
 
-    threshold = sum_perct/20
+    threshold = sum_perct/2000
 
 
     matched_label = []
@@ -384,9 +382,6 @@ if __name__ == "__main__":
         if (label_list_data[label][0] >= threshold):
             matched_label.append(label)
             create_output(label)
-
-    if ((matched_label)<40):
-        matched_label.append('other')
 
     #other's count
     def union_all(*dfs):
