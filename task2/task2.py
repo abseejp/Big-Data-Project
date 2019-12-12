@@ -28,10 +28,11 @@ if __name__ == "__main__":
 
     # Read cluster.txt file
     file_object = open(cluster_file)
-    file_object.close()
 
     # Remove bracket '[]' from start/end and convert string to list of files
     file_list = file_object.read()[1:-1].split(',')
+
+    file_object.close()
 
     for file_name in file_list:
 
