@@ -36,8 +36,8 @@ if __name__ == "__main__":
 
     for file_name in file_list:
 
-        #remove '.gz' from end
-        inFile = file_name.strip()[1:-4]
+        #remove space
+        inFile = file_name.strip()
         print("Executing data profiling with input from " + inFile)
 
         text_file = sc.textFile(inFile)
