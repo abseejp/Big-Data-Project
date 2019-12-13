@@ -26,7 +26,7 @@ if __name__ == "__main__":
     directory = "/home/mva271/"
 
     for file in os.listdir(directory):
-        if(file != 'profiling.py' or file != 'run_task2.sh' or file != 'merge_jsons.py' or file != 'task1-outputs' or file != '2019BD-project-results'):
+        if(file != 'cluster1.txt' and file != 'task2.py' and file != 'run_task2.sh' and file != 'merge_jsons.py'):
             files.append(directory+str(file))
 
     cat_json(directory+output, files)
