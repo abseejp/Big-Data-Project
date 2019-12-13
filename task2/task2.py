@@ -24,7 +24,7 @@ if __name__ == "__main__":
 
     # get command-line arguments
     # Provide path to cluster.txt in the inFile
-    cluster_file = sys.argv[0]
+    cluster_file = sys.argv[1]
 
     # Read cluster.txt file
     file_object = open(cluster_file)
