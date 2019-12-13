@@ -37,7 +37,7 @@ if __name__ == "__main__":
     for file_name in file_list:
 
         #remove space
-        inFile = file_name.strip()
+        inFile = file_name.strip()[1:-1]
         print("Executing data profiling with input from " + inFile)
 
         text_file = sc.textFile(inFile)
@@ -422,7 +422,7 @@ if __name__ == "__main__":
             }
 
 
-        json_filename = column_name + ".json"
+        json_filename = inFile[:-7] + ".json"
         with open(json_filename, "a+") as f:
             json.dump(semantic_dict, f)
 
