@@ -23,5 +23,8 @@ do
 
 done < "$input"
 
+# Run semantic profiling
+spark-submit --conf spark.pyspark.python=$PYSPARK_PYTHON task2.py "cluster1.txt"
+
 # Merge all of the json files together into a single "task2.json"
 python merge_jsons.py
