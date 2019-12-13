@@ -12,7 +12,7 @@ def cat_json(output_filename, input_filenames):
         for infile_name in input_filenames:
             with open(infile_name) as infile:
                 if first:
-                    outfile.write('{ "datasets": [')
+                    outfile.write('{ "predicted_types": [')
                     first = False
                 else:
                     outfile.write(',')
@@ -21,12 +21,12 @@ def cat_json(output_filename, input_filenames):
 
 if __name__ == "__main__":
     
-    output = "task1.json"
+    output = "task2.json"
     files = []
-    directory = "/home/mva271"
+    directory = "/home/mva271/"
 
     for file in os.listdir(directory):
-        if(file != 'profiling.py' or file != 'run_task1.sh' or file != 'merge_jsons.py'):
+        if(file != 'profiling.py' or file != 'run_task2.sh' or file != 'merge_jsons.py' or file != 'task1-outputs' or file != '2019BD-project-results'):
             files.append(directory+str(file))
 
     cat_json(directory+output, files)
