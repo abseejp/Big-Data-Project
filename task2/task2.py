@@ -24,7 +24,7 @@ if __name__ == "__main__":
 
     # get command-line arguments
     # Provide path to cluster.txt in the inFile
-    cluster_file = sys.argv[0]
+    cluster_file = sys.argv[1]
 
     # Read cluster.txt file
     file_object = open(cluster_file)
@@ -44,9 +44,10 @@ if __name__ == "__main__":
         column_name = inFile.split('.')[1]
 
         list_row = text_file.map(lambda x: [x.split("\t")[0]])
+        #list_row = text_file.map(lambda x: [x.split("\t")[0]])                                                                      t
 
         # converting to dataframe
-        df = list_row.toDF()
+        df = list_row.toDF()  # convert to dataframe
         df_count = df.count()  # count rows in dataframe
         col_name = df.columns[0]  # retrive column name
 
